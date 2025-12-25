@@ -139,21 +139,49 @@ const App = () => {
 
   useEffect(() => { provincesRef.current = provinces; }, [provinces]);
 
-  // ▼▼▼ ゲーム終了判定 ▼▼▼
+  // ▼▼▼ 滅亡チェック処理 (修正版) ▼▼▼
+  // 領土が変更されるたびにチェックし、領土ゼロなら即座に滅亡(isAlive: false)させる
+  const checkElimination = () => {
+      setDaimyoStats(prev => {
+          let hasChange = false;
+          const next = { ...prev };
+          
+          Object.keys(next).forEach(id => {
+              if (id === 'Minor') return;
+              
+              const hasLand = provincesRef.current.some(p => p.ownerId === id);
+              // ▼ 修正: 徳川家の例外処理を削除（最初から領土がなければ滅亡）
+              // if (id === 'Tokugawa' && turn <= 3) return;
+
+              // 領土がなく、かつ現在生きている場合のみ更新
+              if (!hasLand && next[id].isAlive !== false) {
+                  next[id] = { ...next[id], isAlive: false };
+                  hasChange = true;
+              }
+          });
+          return hasChange ? next : prev;
+      });
+  };
+
+  // ▼▼▼ ゲーム終了判定 & 滅亡チェックトリガー ▼▼▼
   useEffect(() => {
+    // 領土更新時に滅亡判定を実行
+    checkElimination();
+
     if (!playerDaimyoId || playerDaimyoId === 'SPECTATOR') return;
 
     const playerStats = daimyoStats[playerDaimyoId];
-    
     const playerCount = provinces.filter(p => p.ownerId === playerDaimyoId).length;
+    
+    // プレイヤーの勝利判定
     if (playerCount === provinces.length) {
         setGameState('won');
     }
-    // isAlive が「明確に false」の場合のみ敗北
-    else if (playerStats && playerStats.isAlive === false) {
+    // プレイヤーの敗北判定 (isAliveがfalse、または領土が0になった時点)
+    else if ((playerStats && playerStats.isAlive === false) || (playerCount === 0 && turn > 0)) {
         setGameState('lost');
     }
-  }, [daimyoStats, provinces, playerDaimyoId]);
+  }, [provinces, daimyoStats, playerDaimyoId]); // provincesの変更を監視
 
   useEffect(() => { if (playerDaimyoId && turnOrder.length === 0) startNewSeason(); }, [playerDaimyoId]);
   
@@ -183,6 +211,7 @@ const App = () => {
       if (currentTurnIndex >= turnOrder.length) { setTurn(t => t + 1); return; }
       
       const currentDaimyo = turnOrder[currentTurnIndex];
+      // 滅亡している大名はスキップ
       if (daimyoStats[currentDaimyo] && daimyoStats[currentDaimyo].isAlive === false) { 
           advanceTurn(); 
           return; 
@@ -192,7 +221,6 @@ const App = () => {
           setIsPlayerTurn(true); showLog(`我が軍の手番です。`);
       } else {
           setIsPlayerTurn(false);
-          // AIターン処理。一時停止中は呼ばない
           if (!isPaused) {
               setTimeout(() => processAiTurn(currentDaimyo), aiSpeed);
           }
@@ -229,25 +257,6 @@ const App = () => {
 
   const handlePauseToggle = () => setIsPaused(prev => !prev);
 
-  // ▼▼▼ 滅亡チェック処理 ▼▼▼
-  const checkElimination = () => {
-      setDaimyoStats(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(id => {
-              if (id === 'Minor') return;
-              
-              const hasLand = provincesRef.current.some(p => p.ownerId === id);
-              
-              if (id === 'Tokugawa' && turn <= 3) return;
-
-              if (!hasLand) {
-                  next[id] = { ...next[id], isAlive: false };
-              }
-          });
-          return next;
-      });
-  };
-
   const handleEventDecision = (event, choice) => {
       setModalState({ type: null });
 
@@ -278,10 +287,8 @@ const App = () => {
               setModalState({ type: 'historical_event', data: nextEvent });
           }, 300);
       } else {
-          // ▼▼▼ イベント終了後の処理 ▼▼▼
           setModalState({ type: null });
           
-          // 松平独立イベント後は必ず一時停止させる
           if (event.id === 'matsudaira_independence') {
               setIsPaused(true);
               showLog("イベントにより情勢が変化したため、一時停止しました。");
@@ -294,6 +301,7 @@ const App = () => {
   };
 
   const startNewSeason = () => {
+      // 念のためここでも滅亡チェック
       checkElimination();
 
       const isAutumn = (turn - 1) % 4 === 2;
@@ -722,6 +730,76 @@ const App = () => {
       }
   };
 
+  const handleDomesticAction = (type, pid) => {
+      const p = provinces.find(pr => pr.id === pid);
+      if (p.actionsLeft <= 0 && type !== 'market' && type !== 'titles') return showLog("行動力がありません");
+
+      if (type === 'market') return setModalState({ type: 'market' });
+      if (type === 'titles') return setModalState({ type: 'titles' });
+      if (type === 'donate') return setModalState({ type: 'donate' });
+      if (type === 'trade') return setModalState({ type: 'trade' });
+
+      const cost = COSTS[type];
+      const stats = daimyoStats[playerDaimyoId];
+      if (stats.gold < cost.gold || stats.rice < (cost.rice||0)) return showLog("資源不足");
+
+      updateResource(playerDaimyoId, -cost.gold, -(cost.rice||0));
+      consumeAction(pid);
+
+      setProvinces(prev => prev.map(pr => {
+          if (pr.id !== pid) return pr;
+          const next = { ...pr };
+          if (type === 'develop') next.commerce += cost.boost;
+          if (type === 'cultivate') next.agriculture += cost.boost;
+          if (type === 'fortify') next.defense += cost.boost;
+          if (type === 'pacify') next.loyalty = Math.min(100, (next.loyalty||50) + cost.boost);
+          return next;
+      }));
+      showLog(`${DAIMYO_INFO[playerDaimyoId].name}家、${p.name}にて${type==='develop'?'商業発展':type==='cultivate'?'開墾':type==='fortify'?'普請':type==='pacify'?'施し':''}を行いました。`);
+  };
+
+  const handleMilitaryAction = (type, pid) => {
+      const p = provinces.find(pr => pr.id === pid);
+      if (p.actionsLeft <= 0) return showLog("行動力がありません");
+
+      if (type === 'attack') {
+          setAttackSourceId(pid);
+          showLog("攻撃目標を選択してください");
+          setSelectedProvinceId(null);
+          return;
+      }
+      if (type === 'transport') {
+          setTransportSourceId(pid);
+          showLog("輸送先を選択してください");
+          setSelectedProvinceId(null);
+          return;
+      }
+
+      const cost = COSTS[type];
+      const stats = daimyoStats[playerDaimyoId];
+      if (stats.gold < cost.gold || stats.rice < (cost.rice||0)) return showLog("資源不足");
+
+      updateResource(playerDaimyoId, -cost.gold, -(cost.rice||0));
+      consumeAction(pid);
+
+      setProvinces(prev => prev.map(pr => {
+          if (pr.id !== pid) return pr;
+          const next = { ...pr };
+          if (type === 'recruit') {
+              next.troops += cost.troops;
+              next.loyalty = Math.max(0, (next.loyalty||50) - 5);
+          }
+          if (type === 'train') next.training = Math.min(100, (next.training||50) + cost.boost);
+          return next;
+      }));
+      showLog(`${type==='recruit'?'徴兵':'訓練'}を行いました。`);
+  };
+
+  const exportData = () => {
+      console.log(JSON.stringify(provinces, null, 2));
+      alert("コンソールに現在の領土データを出力しました。(DevToolsで確認してください)");
+  };
+
   const handleWheel = (e) => {
     const scaleAmount = -e.deltaY * 0.001;
     const newScale = Math.min(Math.max(0.2, mapTransform.scale + scaleAmount), 3);
@@ -786,13 +864,18 @@ const App = () => {
             </div>
         </div>
 
-        {!isEditMode && (
+        {selectedProvinceId && (
             <ProvincePopup 
                 selectedProvince={selectedProvinceId ? provinces.find(p => p.id === selectedProvinceId) : null}
                 daimyoStats={daimyoStats} playerDaimyoId={playerDaimyoId} isPlayerTurn={isPlayerTurn} viewingRelationId={viewingRelationId}
                 shogunId={shogunId} alliances={alliances} ceasefires={ceasefires} coalition={coalition}
                 onClose={() => setSelectedProvinceId(null)}
-                onAction={(type, pid) => {
+                isEditMode={isEditMode}
+                onAction={(type, pid, val) => {
+                    if (type === 'change_owner') {
+                         setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ownerId: val } : p));
+                         return;
+                    }
                     if (['develop','cultivate','pacify','fortify','market','trade','donate','titles'].includes(type)) handleDomesticAction(type, pid);
                     else if (['attack','transport','recruit','train'].includes(type)) handleMilitaryAction(type, pid);
                     else handleDiplomacy(type, provinces.find(p=>p.id===pid).ownerId);
