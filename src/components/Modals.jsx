@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, History, XCircle, Scale, Crown, Zap, Landmark, Ship, Star, Handshake, Users, Sword, Shield, RefreshCw, Trophy, Skull } from 'lucide-react';
+import { MessageCircle, History, XCircle, Scale, Crown, Zap, Landmark, Ship, Star, Handshake, Users, Sword, Shield, RefreshCw, Trophy, Skull, Eye } from 'lucide-react';
 import { DAIMYO_INFO, TITLES, COURT_RANKS } from '../data/daimyos';
 import { COSTS } from '../data/constants';
 
@@ -177,7 +177,6 @@ export const NegotiationScene = ({ targetDaimyoId, targetDaimyo, isAllied, onCon
     </div>
 );
 
-// ▼ 修正: データの存在チェックを追加してクラッシュを防ぐ
 export const DaimyoListModal = ({ provinces, daimyoStats, alliances, ceasefires, relations, onClose, playerDaimyoId, coalition, onViewOnMap }) => {
   const activeDaimyos = Object.keys(DAIMYO_INFO)
     .filter(id => id !== 'Minor')
@@ -202,10 +201,10 @@ export const DaimyoListModal = ({ provinces, daimyoStats, alliances, ceasefires,
                   <td className="p-2 flex items-center gap-2"><span className={`w-3 h-3 rounded-full ${d.color}`}></span>{d.name}</td>
                   <td className="p-2 font-mono text-purple-300">{d.stats.fame}</td><td className="p-2 font-mono">{d.count}</td><td className="p-2 font-mono text-yellow-300">{d.stats.gold}</td><td className="p-2 font-mono text-green-300">{d.stats.rice}</td>
                   <td className="p-2 text-xs">
-                     {d.stats.titles.map(t=><div key={t} className="bg-yellow-900/50 text-yellow-200 px-1 rounded border border-yellow-700 inline-block mr-1">{t}</div>)}
+                     {(d.stats.titles || []).map(t=><div key={t} className="bg-yellow-900/50 text-yellow-200 px-1 rounded border border-yellow-700 inline-block mr-1">{t}</div>)}
                      {d.stats.rank && <div className="bg-purple-900/50 text-purple-200 px-1 rounded border border-purple-700 inline-block">{d.stats.rank}</div>}
                   </td>
-                  <td className="p-2">{d.id === playerDaimyoId ? '-' : relations[playerDaimyoId][d.id]}</td>
+                  <td className="p-2">{d.id === playerDaimyoId ? '-' : relations[playerDaimyoId]?.[d.id]}</td>
                   <td className="p-2"><button onClick={() => onViewOnMap(d.id)} className="p-1 bg-stone-600 rounded"><Eye size={14}/></button></td>
                 </tr>
               ))}
