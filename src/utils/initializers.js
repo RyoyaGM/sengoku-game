@@ -4,7 +4,16 @@ import { PROVINCE_DATA_BASE } from '../data/provinces';
 // --- 初期リソース計算 ---
 export const INITIAL_RESOURCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => {
   const baseFame = HISTORICAL_FAME[key] || 50;
-  acc[key] = { gold: 300, rice: 300, fame: baseFame, donatedImperial: 0, donatedShogunate: 0, titles: [], rank: null };
+  acc[key] = { 
+      gold: 300, 
+      rice: 300, 
+      fame: baseFame, 
+      donatedImperial: 0, 
+      donatedShogunate: 0, 
+      titles: [], 
+      rank: null,
+      isAlive: true // 初期状態は全員生存
+  };
   return acc;
 }, {});
 
@@ -19,8 +28,11 @@ export const INITIAL_ALLIANCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => (
 const setAlliance = (a, b) => { if(INITIAL_ALLIANCES[a]) INITIAL_ALLIANCES[a].push(b); if(INITIAL_ALLIANCES[b]) INITIAL_ALLIANCES[b].push(a); };
 
 // 初期同盟の設定
-setAlliance('Takeda', 'Hojo'); setAlliance('Takeda', 'Imagawa'); setAlliance('Hojo', 'Imagawa');
-setAlliance('Oda', 'Tokugawa'); setAlliance('Azai', 'Asakura');
+// ★変更点: 織田(Oda)と徳川(Tokugawa)の同盟を削除しました
+setAlliance('Takeda', 'Hojo'); 
+setAlliance('Takeda', 'Imagawa'); 
+setAlliance('Hojo', 'Imagawa');
+setAlliance('Azai', 'Asakura');
 
 // --- 停戦・外交関係 ---
 export const INITIAL_CEASEFIRES = Object.keys(DAIMYO_INFO).reduce((acc, key) => ({...acc, [key]: {}}), {});
@@ -33,7 +45,8 @@ const getInitialRelations = () => {
         ids.forEach(target => {
             if (id === target) return;
             let val = 50;
-            if ((id === 'Oda' && target === 'Tokugawa') || (id === 'Takeda' && target === 'Hojo')) val = 90;
+            // 同盟削除に伴い、初期友好度も調整
+            if (id === 'Takeda' && target === 'Hojo') val = 90;
             if ((id === 'Oda' && target === 'Imagawa') || (id === 'Takeda' && target === 'Uesugi')) val = 10;
             rel[id][target] = val;
         });
@@ -60,7 +73,6 @@ function validateAndFixData(db) {
     });
 }
 
-// データの整合性チェック実行
 validateAndFixData(PROVINCE_DATA_BASE);
 
 export const INITIAL_PROVINCES = PROVINCE_DATA_BASE.map(p => ({
