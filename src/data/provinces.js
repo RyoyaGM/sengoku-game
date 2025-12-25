@@ -22,28 +22,19 @@ export const SEA_ROUTES = [
 
 export const PROVINCE_DATA_BASE = [
   // --- 北海道 (蝦夷地) ---
-  // 【内実修正】石高を極限まで下げ、商業を大幅強化。米を買って戦う地域性を表現。
-  
-  // 徳山（松前）: 蠣崎本拠。米は取れない(5)が、対岸貿易で栄える(80)。
+  // 【修正】名称を1560年当時の「館」に変更、農業をほぼ0にし商業特化
   { id: 'matsumae', name: '徳山', ownerId: 'Kakizaki', troops: 400, cx: 1730, cy: 90, neighbors: ['usukeshi', 'kudo', 'tsugaru'], commerce: 80, agriculture: 5, defense: 40 },
-  
-  // 宇須岸（函館）: 天然の良港。商業価値が高い(90)。
   { id: 'usukeshi', name: '宇須岸', ownerId: 'Kakizaki', troops: 300, cx: 1810, cy: 70, neighbors: ['matsumae', 'sannohe', 'tsugaru', 'ishikari'], commerce: 90, agriculture: 2, defense: 30 },
-  
-  // 久遠（上ノ国）: 日本海側交易拠点。
   { id: 'kudo', name: '久遠', ownerId: 'Kakizaki', troops: 200, cx: 1670, cy: 40, neighbors: ['matsumae', 'ishikari'], commerce: 60, agriculture: 5, defense: 30 },
-  
-  // 石狩: アイヌの鮭交易の中心地。農業皆無(2)だが資源豊富(70)。
   { id: 'ishikari', name: '石狩', ownerId: 'Ainu', troops: 500, cx: 1850, cy: 20, neighbors: ['usukeshi', 'soya', 'kudo'], commerce: 70, agriculture: 2, defense: 20 },
-  
-  // 宗谷: 北方交易の窓口。
   { id: 'soya', name: '宗谷', ownerId: 'Ainu', troops: 300, cx: 1880, cy: -30, neighbors: ['ishikari'], commerce: 60, agriculture: 0, defense: 10 },
 
   // --- 東北 (奥羽) ---
+  // 【修正】秋田→湊（土崎）
   { id: 'tsugaru', name: '津軽', ownerId: 'Nanbu', troops: 400, cx: 1750, cy: 130, neighbors: ['usukeshi', 'matsumae', 'sannohe', 'akita'], commerce: 50, agriculture: 50, defense: 40 },
   { id: 'sannohe', name: '三戸', ownerId: 'Nanbu', troops: 600, cx: 1800, cy: 160, neighbors: ['tsugaru', 'usukeshi', 'rikuchu'], commerce: 30, agriculture: 50, defense: 50 },
   { id: 'rikuchu', name: '陸中', ownerId: 'Nanbu', troops: 500, cx: 1800, cy: 260, neighbors: ['sannohe', 'senboku', 'rikuzen'], commerce: 30, agriculture: 40, defense: 40 },
-  { id: 'akita', name: '湊', ownerId: 'Ando', troops: 400, cx: 1680, cy: 230, neighbors: ['tsugaru', 'senboku', 'shonai'], commerce: 80, agriculture: 40, defense: 30 }, // 湊（土崎）も日本海交易の要所なので商業高め
+  { id: 'akita', name: '湊', ownerId: 'Ando', troops: 400, cx: 1680, cy: 230, neighbors: ['tsugaru', 'senboku', 'shonai'], commerce: 80, agriculture: 40, defense: 30 },
   { id: 'senboku', name: '仙北', ownerId: 'Onodera', troops: 300, cx: 1720, cy: 260, neighbors: ['akita', 'rikuchu', 'mogami'], commerce: 20, agriculture: 40, defense: 40 },
   { id: 'shonai', name: '庄内', ownerId: 'Daihoji', troops: 300, cx: 1640, cy: 320, neighbors: ['akita', 'mogami', 'kasugayama'], commerce: 60, agriculture: 70, defense: 30 },
   { id: 'mogami', name: '最上', ownerId: 'Mogami', troops: 500, cx: 1700, cy: 330, neighbors: ['senboku', 'shonai', 'yonezawa', 'rikuzen'], commerce: 50, agriculture: 60, defense: 40 },
@@ -54,11 +45,12 @@ export const PROVINCE_DATA_BASE = [
   { id: 'shirakawa', name: '白河', ownerId: 'Yuki_S', troops: 400, cx: 1720, cy: 490, neighbors: ['nasu', 'aizu', 'iwaki', 'yonezawa'], commerce: 30, agriculture: 50, defense: 60 },
 
   // --- 関東 ---
+  // 【修正】水戸→太田、佐倉→本佐倉
   { id: 'nasu', name: '那須', ownerId: 'Nasu', troops: 300, cx: 1690, cy: 500, neighbors: ['aizu', 'mito', 'utsunomiya', 'shirakawa'], commerce: 20, agriculture: 40, defense: 40 },
   { id: 'utsunomiya', name: '宇都宮', ownerId: 'Utsunomiya', troops: 400, cx: 1650, cy: 570, neighbors: ['nasu', 'mito', 'kawagoe', 'umayabashi'], commerce: 40, agriculture: 60, defense: 40 },
-  { id: 'mito', name: '水戸', ownerId: 'Satake', troops: 600, cx: 1750, cy: 540, neighbors: ['iwaki', 'nasu', 'utsunomiya', 'kashima', 'sakura'], commerce: 50, agriculture: 70, defense: 50 },
+  { id: 'mito', name: '太田', ownerId: 'Satake', troops: 600, cx: 1750, cy: 540, neighbors: ['iwaki', 'nasu', 'utsunomiya', 'kashima', 'sakura'], commerce: 50, agriculture: 70, defense: 50 },
   { id: 'kashima', name: '鹿島', ownerId: 'Satake', troops: 400, cx: 1780, cy: 600, neighbors: ['mito', 'edo', 'sakura'], commerce: 60, agriculture: 50, defense: 30 },
-  { id: 'sakura', name: '佐倉', ownerId: 'Chiba', troops: 500, cx: 1720, cy: 600, neighbors: ['edo', 'kashima', 'kazusa', 'mito'], commerce: 60, agriculture: 60, defense: 40 },
+  { id: 'sakura', name: '本佐倉', ownerId: 'Chiba', troops: 500, cx: 1720, cy: 600, neighbors: ['edo', 'kashima', 'kazusa', 'mito'], commerce: 60, agriculture: 60, defense: 40 },
   { id: 'umayabashi', name: '厩橋', ownerId: 'Uesugi_N', troops: 500, cx: 1580, cy: 550, neighbors: ['utsunomiya', 'kawagoe', 'saku', 'kasugayama'], commerce: 30, agriculture: 50, defense: 50 },
   { id: 'kawagoe', name: '河越', ownerId: 'Hojo', troops: 700, cx: 1630, cy: 610, neighbors: ['utsunomiya', 'umayabashi', 'edo', 'odawara', 'kai'], commerce: 50, agriculture: 80, defense: 60 },
   { id: 'edo', name: '江戸', ownerId: 'Hojo', troops: 600, cx: 1680, cy: 640, neighbors: ['kawagoe', 'kashima', 'kazusa', 'sakura'], commerce: 80, agriculture: 70, defense: 50 },
@@ -68,12 +60,13 @@ export const PROVINCE_DATA_BASE = [
   { id: 'izu', name: '伊豆', ownerId: 'Hojo', troops: 400, cx: 1620, cy: 740, neighbors: ['odawara', 'sunpu'], commerce: 40, agriculture: 20, defense: 40 },
 
   // --- 中部・北陸 ---
+  // 【修正】浜松→引馬、金沢→尾山御坊
   { id: 'kasugayama', name: '春日山', ownerId: 'Uesugi', troops: 1100, cx: 1480, cy: 400, neighbors: ['shonai', 'kanbara', 'kawanakajima', 'etchu', 'umayabashi', 'sado'], commerce: 60, agriculture: 80, defense: 90 },
   { id: 'kanbara', name: '蒲原', ownerId: 'Uesugi', troops: 500, cx: 1550, cy: 380, neighbors: ['kasugayama', 'aizu'], commerce: 40, agriculture: 90, defense: 40 },
   { id: 'sado', name: '佐渡', ownerId: 'Honma', troops: 200, cx: 1450, cy: 330, neighbors: ['kasugayama'], commerce: 150, agriculture: 20, defense: 40 },
   { id: 'etchu', name: '越中', ownerId: 'Jinbo', troops: 400, cx: 1350, cy: 420, neighbors: ['kasugayama', 'kanazawa', 'hida', 'noto'], commerce: 40, agriculture: 50, defense: 40 },
   { id: 'noto', name: '能登', ownerId: 'Hatakeyama', troops: 400, cx: 1300, cy: 360, neighbors: ['etchu', 'kanazawa'], commerce: 50, agriculture: 30, defense: 40 },
-  { id: 'kanazawa', name: '金沢', ownerId: 'Honganji', troops: 1000, cx: 1250, cy: 430, neighbors: ['etchu', 'noto', 'ichijodani'], commerce: 70, agriculture: 90, defense: 80 },
+  { id: 'kanazawa', name: '尾山御坊', ownerId: 'Honganji', troops: 1000, cx: 1250, cy: 430, neighbors: ['etchu', 'noto', 'ichijodani'], commerce: 70, agriculture: 90, defense: 80 },
   { id: 'ichijodani', name: '一乗谷', ownerId: 'Asakura', troops: 800, cx: 1200, cy: 500, neighbors: ['kanazawa', 'odani', 'inabayama', 'tsuruga'], commerce: 80, agriculture: 70, defense: 70 },
   { id: 'tsuruga', name: '敦賀', ownerId: 'Asakura', troops: 400, cx: 1160, cy: 510, neighbors: ['ichijodani', 'odani', 'obama'], commerce: 70, agriculture: 30, defense: 40 },
   { id: 'obama', name: '小浜', ownerId: 'Takeda_W', troops: 300, cx: 1100, cy: 510, neighbors: ['tsuruga', 'miyazu'], commerce: 60, agriculture: 30, defense: 30 },
@@ -93,27 +86,29 @@ export const PROVINCE_DATA_BASE = [
   { id: 'gujo', name: '郡上', ownerId: 'Endo', troops: 300, cx: 1320, cy: 550, neighbors: ['inabayama', 'hida'], commerce: 20, agriculture: 20, defense: 60 },
 
   // --- 畿内 ---
+  // 【修正】安土→観音寺、和歌山→雑賀、篠山→八上、豊岡→此隅山、宮津→弓木
   { id: 'anotsu', name: '安濃津', ownerId: 'Kitabatake', troops: 600, cx: 1220, cy: 700, neighbors: ['kiyosu', 'azuchi', 'nara', 'shima'], commerce: 60, agriculture: 70, defense: 40 },
   { id: 'shima', name: '志摩', ownerId: 'Kuki', troops: 200, cx: 1240, cy: 750, neighbors: ['anotsu'], commerce: 50, agriculture: 10, defense: 30 },
   { id: 'odani', name: '小谷', ownerId: 'Azai', troops: 600, cx: 1180, cy: 540, neighbors: ['azuchi', 'ichijodani', 'tsuruga'], commerce: 40, agriculture: 60, defense: 80 },
-  { id: 'azuchi', name: '安土', ownerId: 'Rokkaku', troops: 700, cx: 1180, cy: 600, neighbors: ['odani', 'kyoto', 'inabayama', 'koga', 'anotsu'], commerce: 80, agriculture: 80, defense: 60 },
+  { id: 'azuchi', name: '観音寺', ownerId: 'Rokkaku', troops: 700, cx: 1180, cy: 600, neighbors: ['odani', 'kyoto', 'inabayama', 'koga', 'anotsu'], commerce: 80, agriculture: 80, defense: 60 },
   { id: 'koga', name: '甲賀', ownerId: 'Rokkaku', troops: 400, cx: 1160, cy: 650, neighbors: ['azuchi', 'nara'], commerce: 30, agriculture: 30, defense: 70 },
   { id: 'kyoto', name: '京都', ownerId: 'Ashikaga', troops: 500, cx: 1120, cy: 610, neighbors: ['azuchi', 'ishiyama', 'nara', 'sasayama'], commerce: 200, agriculture: 50, defense: 60 },
   { id: 'nara', name: '奈良', ownerId: 'Tsutsui', troops: 500, cx: 1110, cy: 670, neighbors: ['kyoto', 'sakai', 'koga', 'anotsu', 'totsukawa'], commerce: 90, agriculture: 60, defense: 50 },
   { id: 'totsukawa', name: '十津川', ownerId: 'Hatakeyama', troops: 300, cx: 1110, cy: 750, neighbors: ['nara', 'wakayama'], commerce: 10, agriculture: 20, defense: 60 },
-  { id: 'wakayama', name: '和歌山', ownerId: 'Saika', troops: 700, cx: 1050, cy: 780, neighbors: ['totsukawa', 'sakai', 'tokushima'], commerce: 60, agriculture: 30, defense: 70 },
+  { id: 'wakayama', name: '雑賀', ownerId: 'Saika', troops: 700, cx: 1050, cy: 780, neighbors: ['totsukawa', 'sakai', 'tokushima'], commerce: 60, agriculture: 30, defense: 70 },
   { id: 'sakai', name: '堺', ownerId: 'Merchant', troops: 300, cx: 1050, cy: 700, neighbors: ['ishiyama', 'nara', 'wakayama'], commerce: 250, agriculture: 10, defense: 70 },
   { id: 'ishiyama', name: '石山', ownerId: 'Honganji', troops: 1200, cx: 1070, cy: 640, neighbors: ['kyoto', 'sakai', 'hyogo', 'sasayama'], commerce: 100, agriculture: 70, defense: 150 },
   { id: 'hyogo', name: '兵庫', ownerId: 'Miyoshi', troops: 900, cx: 1010, cy: 640, neighbors: ['ishiyama', 'himeji', 'sasayama', 'sumoto'], commerce: 120, agriculture: 70, defense: 60 },
-  { id: 'sasayama', name: '篠山', ownerId: 'Hatano', troops: 400, cx: 1040, cy: 580, neighbors: ['kyoto', 'ishiyama', 'hyogo', 'himeji', 'miyazu'], commerce: 30, agriculture: 50, defense: 60 },
-  { id: 'miyazu', name: '宮津', ownerId: 'Isshiki', troops: 300, cx: 1030, cy: 500, neighbors: ['obama', 'sasayama', 'toyooka'], commerce: 50, agriculture: 30, defense: 40 },
+  { id: 'sasayama', name: '八上', ownerId: 'Hatano', troops: 400, cx: 1040, cy: 580, neighbors: ['kyoto', 'ishiyama', 'hyogo', 'himeji', 'miyazu'], commerce: 30, agriculture: 50, defense: 60 },
+  { id: 'miyazu', name: '弓木', ownerId: 'Isshiki', troops: 300, cx: 1030, cy: 500, neighbors: ['obama', 'sasayama', 'toyooka'], commerce: 50, agriculture: 30, defense: 40 },
 
   // --- 中国 ---
+  // 【修正】津山→高田、岡山→天神山、福山→神辺、萩→山口
   { id: 'himeji', name: '姫路', ownerId: 'Akamatsu', troops: 500, cx: 940, cy: 640, neighbors: ['hyogo', 'sasayama', 'okayama', 'tottori', 'toyooka', 'tsuyama'], commerce: 70, agriculture: 80, defense: 50 },
-  { id: 'toyooka', name: '豊岡', ownerId: 'Yamana', troops: 400, cx: 970, cy: 520, neighbors: ['miyazu', 'tottori', 'himeji'], commerce: 30, agriculture: 40, defense: 50 },
+  { id: 'toyooka', name: '此隅山', ownerId: 'Yamana', troops: 400, cx: 970, cy: 520, neighbors: ['miyazu', 'tottori', 'himeji'], commerce: 30, agriculture: 40, defense: 50 },
   { id: 'tottori', name: '鳥取', ownerId: 'Yamana', troops: 400, cx: 880, cy: 540, neighbors: ['toyooka', 'himeji', 'gassan-toda', 'tsuyama'], commerce: 40, agriculture: 40, defense: 40 },
-  { id: 'tsuyama', name: '津山', ownerId: 'Mimura', troops: 400, cx: 860, cy: 600, neighbors: ['tottori', 'himeji', 'okayama', 'niimi'], commerce: 30, agriculture: 50, defense: 40 },
-  { id: 'okayama', name: '岡山', ownerId: 'Ukita', troops: 600, cx: 860, cy: 650, neighbors: ['himeji', 'tsuyama', 'niimi', 'takamatsu_s', 'fukuyama'], commerce: 70, agriculture: 70, defense: 50 },
+  { id: 'tsuyama', name: '高田', ownerId: 'Mimura', troops: 400, cx: 860, cy: 600, neighbors: ['tottori', 'himeji', 'okayama', 'niimi'], commerce: 30, agriculture: 50, defense: 40 },
+  { id: 'okayama', name: '天神山', ownerId: 'Ukita', troops: 600, cx: 860, cy: 650, neighbors: ['himeji', 'tsuyama', 'niimi', 'takamatsu_s', 'fukuyama'], commerce: 70, agriculture: 70, defense: 50 },
   { id: 'niimi', name: '新見', ownerId: 'Mimura', troops: 400, cx: 800, cy: 610, neighbors: ['tsuyama', 'okayama', 'fukuyama', 'gassan-toda'], commerce: 30, agriculture: 50, defense: 50 },
   { id: 'gassan-toda', name: '月山富田', ownerId: 'Amago', troops: 1000, cx: 780, cy: 550, neighbors: ['tottori', 'niimi', 'fukuyama', 'iwami-ginzan', 'oki'], commerce: 50, agriculture: 60, defense: 110 },
   { id: 'oki', name: '隠岐', ownerId: 'Amago', troops: 200, cx: 780, cy: 480, neighbors: ['gassan-toda'], commerce: 40, agriculture: 10, defense: 30 },
@@ -121,23 +116,25 @@ export const PROVINCE_DATA_BASE = [
   { id: 'yoshida-koriyama', name: '吉田郡山', ownerId: 'Mori', troops: 1000, cx: 690, cy: 640, neighbors: ['fukuyama', 'iwami-ginzan', 'itsukushima'], commerce: 40, agriculture: 60, defense: 100 },
   { id: 'iwami-ginzan', name: '石見銀山', ownerId: 'Mori', troops: 600, cx: 680, cy: 580, neighbors: ['yoshida-koriyama', 'gassan-toda', 'hagi'], commerce: 350, agriculture: 10, defense: 70 },
   { id: 'itsukushima', name: '厳島', ownerId: 'Mori', troops: 400, cx: 670, cy: 700, neighbors: ['yoshida-koriyama', 'hagi', 'imabari'], commerce: 120, agriculture: 20, defense: 50 },
-  { id: 'hagi', name: '萩', ownerId: 'Mori', troops: 500, cx: 580, cy: 640, neighbors: ['itsukushima', 'iwami-ginzan', 'shimonoseki'], commerce: 40, agriculture: 50, defense: 50 },
+  { id: 'hagi', name: '山口', ownerId: 'Mori', troops: 500, cx: 580, cy: 640, neighbors: ['itsukushima', 'iwami-ginzan', 'shimonoseki'], commerce: 40, agriculture: 50, defense: 50 },
   { id: 'shimonoseki', name: '下関', ownerId: 'Mori', troops: 500, cx: 500, cy: 660, neighbors: ['hagi', 'hakata', 'kokura'], commerce: 100, agriculture: 30, defense: 50 },
 
   // --- 四国 ---
+  // 【修正】徳島→勝瑞、高松→十河、今治→湯築、高知→岡豊、四万十→中村
   { id: 'sumoto', name: '洲本', ownerId: 'Miyoshi', troops: 300, cx: 980, cy: 700, neighbors: ['hyogo', 'tokushima'], commerce: 40, agriculture: 30, defense: 40 },
-  { id: 'tokushima', name: '徳島', ownerId: 'Miyoshi', troops: 700, cx: 920, cy: 750, neighbors: ['sumoto', 'wakayama', 'takamatsu_s', 'kochi'], commerce: 60, agriculture: 60, defense: 40 },
-  { id: 'takamatsu_s', name: '高松', ownerId: 'Miyoshi', troops: 600, cx: 860, cy: 710, neighbors: ['tokushima', 'imabari', 'kochi', 'okayama'], commerce: 60, agriculture: 60, defense: 40 },
-  { id: 'imabari', name: '今治', ownerId: 'Kono', troops: 500, cx: 760, cy: 760, neighbors: ['takamatsu_s', 'kochi', 'itsukushima', 'funai', 'fukuyama', 'shimanto'], commerce: 50, agriculture: 50, defense: 40 },
+  { id: 'tokushima', name: '勝瑞', ownerId: 'Miyoshi', troops: 700, cx: 920, cy: 750, neighbors: ['sumoto', 'wakayama', 'takamatsu_s', 'kochi'], commerce: 60, agriculture: 60, defense: 40 },
+  { id: 'takamatsu_s', name: '十河', ownerId: 'Miyoshi', troops: 600, cx: 860, cy: 710, neighbors: ['tokushima', 'imabari', 'kochi', 'okayama'], commerce: 60, agriculture: 60, defense: 40 },
+  { id: 'imabari', name: '湯築', ownerId: 'Kono', troops: 500, cx: 760, cy: 760, neighbors: ['takamatsu_s', 'kochi', 'itsukushima', 'funai', 'fukuyama', 'shimanto'], commerce: 50, agriculture: 50, defense: 40 },
   { id: 'kochi', name: '岡豊', ownerId: 'Chosokabe', troops: 600, cx: 820, cy: 830, neighbors: ['tokushima', 'takamatsu_s', 'imabari', 'shimanto'], commerce: 30, agriculture: 50, defense: 50 },
-  { id: 'shimanto', name: '四万十', ownerId: 'Ichijo', troops: 400, cx: 750, cy: 850, neighbors: ['kochi', 'imabari'], commerce: 40, agriculture: 40, defense: 30 },
+  { id: 'shimanto', name: '中村', ownerId: 'Ichijo', troops: 400, cx: 750, cy: 850, neighbors: ['kochi', 'imabari'], commerce: 40, agriculture: 40, defense: 30 },
 
   // --- 九州・沖縄 ---
+  // 【修正】小倉→門司、佐賀→村中、熊本→隈本
   { id: 'hakata', name: '博多', ownerId: 'Otomo', troops: 800, cx: 380, cy: 660, neighbors: ['shimonoseki', 'funai', 'saga', 'kokura'], commerce: 180, agriculture: 60, defense: 50 },
   { id: 'kokura', name: '門司', ownerId: 'Otomo', troops: 500, cx: 440, cy: 670, neighbors: ['hakata', 'funai', 'shimonoseki'], commerce: 70, agriculture: 50, defense: 60 },
   { id: 'funai', name: '府内', ownerId: 'Otomo', troops: 1200, cx: 480, cy: 750, neighbors: ['hakata', 'kokura', 'asou', 'usuki', 'imabari'], commerce: 110, agriculture: 70, defense: 70 },
   { id: 'usuki', name: '臼杵', ownerId: 'Otomo', troops: 600, cx: 500, cy: 800, neighbors: ['funai', 'obi'], commerce: 80, agriculture: 40, defense: 60 },
-  { id: 'saga', name: '佐賀', ownerId: 'Ryuzoji', troops: 700, cx: 320, cy: 710, neighbors: ['hakata', 'matsuura', 'arima', 'kumamoto'], commerce: 60, agriculture: 80, defense: 50 },
+  { id: 'saga', name: '村中', ownerId: 'Ryuzoji', troops: 700, cx: 320, cy: 710, neighbors: ['hakata', 'matsuura', 'arima', 'kumamoto'], commerce: 60, agriculture: 80, defense: 50 },
   { id: 'matsuura', name: '松浦', ownerId: 'Matsuura', troops: 400, cx: 270, cy: 680, neighbors: ['saga', 'iki'], commerce: 90, agriculture: 40, defense: 40 },
   { id: 'arima', name: '有馬', ownerId: 'Arima', troops: 500, cx: 280, cy: 760, neighbors: ['saga', 'kumamoto'], commerce: 80, agriculture: 40, defense: 50 },
   { id: 'asou', name: '阿蘇', ownerId: 'Aso', troops: 400, cx: 410, cy: 790, neighbors: ['funai', 'hitoyoshi', 'obi', 'kumamoto'], commerce: 20, agriculture: 50, defense: 70 },
