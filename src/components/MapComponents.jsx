@@ -1,12 +1,10 @@
-// src/components/MapComponents.jsx
-
 import React, { useState } from 'react';
 import { Coins, Wheat, Crown, Zap } from 'lucide-react';
 import { DAIMYO_INFO } from '../data/daimyos';
 import { SEA_ROUTES } from '../data/provinces';
 import { COSTS } from '../data/constants';
 
-// ▼▼▼ 修正箇所: viewBox と className のサイズを変更 (2800x4400) ▼▼▼
+// ▼▼▼ GameMapコンポーネント ▼▼▼
 export const GameMap = ({ 
     provinces, viewingRelationId, playerDaimyoId, 
     alliances, ceasefires, coalition, 
@@ -18,7 +16,6 @@ export const GameMap = ({
 
     return (
         <svg viewBox="0 0 2800 4400" className="w-[2800px] h-[4400px] select-none overflow-visible">
-            {/* ... (中身のコードは変更なし) ... */}
             {provinces.map(p => p.neighbors.map(nid => {
                 const n = provinces.find(neighbor => neighbor.id === nid);
                 if (!n || p.id > n.id) return null;
@@ -82,7 +79,9 @@ export const GameMap = ({
                         <text x={p.cx + (p.labelOffset?.x || 0)} y={p.cy + (p.labelOffset?.y || 0) - 8} textAnchor="middle" fill="white" fontSize="14" fontWeight="bold" className="pointer-events-none drop-shadow-md" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.8)' }}>{p.name}</text>
                         <g transform={`translate(${p.cx-15}, ${p.cy+5})`} className="pointer-events-none"><rect x="0" y="0" width="30" height="18" rx="4" fill="rgba(0,0,0,0.5)" /><text x="15" y="13" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{p.troops}</text></g>
                         
-                        {!isEditMode && p.loyalty < 30 && <text x={p.cx + 20} y={p.cy - 20} className="animate-bounce" fontSize="16">🔥</text>}
+                        {/* ▼▼▼ 修正: 民忠低下時の表示 (アニメーション削除) ▼▼▼ */}
+                        {!isEditMode && p.loyalty < 30 && <text x={p.cx + 20} y={p.cy - 20} fontSize="16">🔥</text>}
+                        
                         {isTargetable && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize="28" fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">攻</text>}
                         {isTransportTarget && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize="28" fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">輸</text>}
                         {!isEditMode && coalition?.target === p.ownerId && <text x={p.cx} y={p.cy-30} className="animate-pulse" fontSize="20">🎯</text>}
@@ -92,7 +91,8 @@ export const GameMap = ({
         </svg>
     );
 };
-// ProvincePopup は変更なしのため省略
+
+// ProvincePopup は変更なし
 export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, isPlayerTurn, viewingRelationId, shogunId, alliances, ceasefires, coalition, onClose, onAction }) => {
     if (!selectedProvince) return null;
     const p = selectedProvince;

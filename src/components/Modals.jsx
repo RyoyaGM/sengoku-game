@@ -1,8 +1,84 @@
+// src/components/Modals.jsx
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, History, XCircle, Scale, Crown, Zap, Landmark, Ship, Star, Handshake, Users, Sword, Shield, RefreshCw, Trophy, Skull, Eye } from 'lucide-react';
+import { MessageCircle, History, XCircle, Scale, Crown, Zap, Landmark, Ship, Star, Handshake, Users, Sword, Shield, RefreshCw, Trophy, Skull, Eye, Scroll, Image as ImageIcon } from 'lucide-react';
 import { DAIMYO_INFO, TITLES, COURT_RANKS } from '../data/daimyos';
 import { COSTS } from '../data/constants';
 
+// ▼ 修正: HistoricalEventModal
+export const HistoricalEventModal = ({ event, daimyoId, onSelect }) => {
+  const isPlayerInvolved = event.choices && event.choices[daimyoId];
+  const description = typeof event.description === 'function' ? event.description(daimyoId) : event.description;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-stone-800 text-white rounded-xl border-2 border-yellow-600 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        {/* ヘッダー */}
+        <div className="bg-stone-900 p-4 border-b border-stone-700 flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-yellow-500 flex items-center gap-2">
+            <Scroll size={24} /> {event.title}
+          </h2>
+          <div className="text-sm text-stone-400">{event.year}年 {event.season}</div>
+        </div>
+
+        {/* 画像エリア */}
+        <div className="w-full h-64 bg-stone-900 flex items-center justify-center relative overflow-hidden group">
+             {/* ▼ 修正: 画像があれば表示、なければアイコンを表示 */}
+             {event.image ? (
+                <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+             ) : (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-t from-stone-800 to-transparent z-10"></div>
+                  <ImageIcon size={64} className="text-stone-500 opacity-50" />
+                  <span className="text-stone-400 text-sm mt-20 absolute">No Image</span>
+                </>
+             )}
+             <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-transparent to-transparent opacity-60"></div>
+        </div>
+
+        {/* 内容 */}
+        <div className="p-6 flex-1 overflow-y-auto">
+          <p className="text-lg leading-relaxed whitespace-pre-wrap mb-6 font-serif">{description}</p>
+          
+          {/* 選択肢 */}
+          {isPlayerInvolved ? (
+            <div className="space-y-4">
+              <div className="text-sm text-yellow-400 mb-2 font-bold flex items-center gap-2"><Zap size={16}/> 運命の決断を下してください</div>
+              {event.choices[daimyoId].map((choice) => (
+                <button 
+                  key={choice.id}
+                  onClick={() => onSelect(choice)}
+                  className="w-full p-4 rounded border border-stone-500 bg-stone-700 hover:bg-stone-600 transition-all text-left group hover:border-yellow-500 relative overflow-hidden"
+                >
+                  <div className="absolute left-0 top-0 w-1 h-full bg-stone-500 group-hover:bg-yellow-500 transition-colors"></div>
+                  <div className="pl-3">
+                    <div className="font-bold text-lg text-white group-hover:text-yellow-300 mb-1 flex items-center gap-2">
+                        {choice.type === 'gamble' && <span className="text-xs bg-red-900 text-red-200 px-1 rounded border border-red-700">賭け</span>}
+                        {choice.type === 'risk' && <span className="text-xs bg-orange-900 text-orange-200 px-1 rounded border border-orange-700">危険</span>}
+                        {choice.text}
+                    </div>
+                    <div className="text-sm text-stone-300">{choice.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center">
+              <button 
+                onClick={() => onSelect(null)} 
+                className="px-8 py-3 bg-stone-600 hover:bg-stone-500 rounded text-white font-bold border border-stone-500"
+              >
+                閉じる
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ... 他のコンポーネント (IncomingRequestModalなど) は変更なし、そのまま下に続けてください
 export const IncomingRequestModal = ({ request, onAccept, onReject }) => {
   if (!request || !request.sourceId) return null; 
   return (
@@ -13,6 +89,8 @@ export const IncomingRequestModal = ({ request, onAccept, onReject }) => {
           {request.type === 'alliance' && "同盟を求めています。受諾しますか？"}
           {request.type === 'ceasefire' && "停戦(5期間)を求めています。金300を持参しました。"}
           {request.type === 'threaten' && "資金の提供を要求しています。「断れば攻め込む」とのことです..."}
+          {request.type === 'ainu_demand' && "一方的な交易の要求です。「金1000、兵糧1000を出せ。さもなくば...わかっているな？」"}
+          {request.type === 'ainu_trade' && "交易の申し出です。「当方の兵糧500と、貴殿の金500を交換してはどうか？」(対等な取引)"}
         </p>
         <div className="flex gap-4">
           <button onClick={onReject} className="flex-1 py-3 rounded bg-red-800 hover:bg-red-700 font-bold">拒否</button>
@@ -152,7 +230,7 @@ export const TradeModal = ({ onConfirm, onCancel }) => (
     </div>
 );
 
-export const NegotiationScene = ({ targetDaimyoId, targetDaimyo, isAllied, onConfirm, onCancel }) => (
+export const NegotiationScene = ({ targetDaimyoId, targetDaimyo, isAllied, onConfirm, onCancel, isPlayerAinu }) => (
     <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 animate-fade-in">
         <div className="flex flex-col items-center mb-8 z-10">
             <div className={`w-32 h-32 rounded-full ${targetDaimyo.color} flex items-center justify-center border-4 border-white shadow-lg mb-4`}><span className="text-4xl font-bold text-white">{targetDaimyo.name[0]}</span></div>
@@ -167,7 +245,15 @@ export const NegotiationScene = ({ targetDaimyoId, targetDaimyo, isAllied, onCon
                     <>
                         <button onClick={() => onConfirm('gift')} className="p-3 bg-pink-900/50 hover:bg-pink-800 border border-pink-500 rounded text-white font-bold flex justify-between items-center"><div>贈答 <span className="text-xs font-normal">(金{COSTS.gift.gold})</span></div> <span className="flex items-center gap-1 text-xs bg-black/30 px-2 rounded"><Zap size={10}/>1</span></button>
                         <button onClick={() => onConfirm('ceasefire')} className="p-3 bg-green-900/50 hover:bg-green-800 border border-green-500 rounded text-white font-bold flex justify-between items-center"><div>停戦協定 <span className="text-xs font-normal">(金300)</span></div> <span className="flex items-center gap-1 text-xs bg-black/30 px-2 rounded"><Zap size={10}/>1</span></button>
-                        <button onClick={() => onConfirm('threaten')} className="p-3 bg-red-900/50 hover:bg-red-800 border border-red-500 rounded text-white font-bold flex justify-between items-center">脅迫 <span className="flex items-center gap-1 text-xs bg-black/30 px-2 rounded"><Zap size={10}/>1</span></button>
+                        
+                        {isPlayerAinu ? (
+                             <button onClick={() => onConfirm('ainu_demand')} className="p-3 bg-purple-900/50 hover:bg-purple-800 border border-purple-500 rounded text-white font-bold flex justify-between items-center">
+                                 <div>理不尽な要求 <span className="text-xs font-normal">(圧力)</span></div> <span className="flex items-center gap-1 text-xs bg-black/30 px-2 rounded"><Zap size={10}/>1</span>
+                             </button>
+                        ) : (
+                             <button onClick={() => onConfirm('threaten')} className="p-3 bg-red-900/50 hover:bg-red-800 border border-red-500 rounded text-white font-bold flex justify-between items-center">脅迫 <span className="flex items-center gap-1 text-xs bg-black/30 px-2 rounded"><Zap size={10}/>1</span></button>
+                        )}
+
                         <button onClick={() => onConfirm('surrender')} className="p-3 bg-orange-900/50 hover:bg-orange-800 border border-orange-500 rounded text-white font-bold flex justify-between items-center">降伏勧告 <span className="flex items-center gap-1 text-xs bg-black/30 px-2 rounded"><Zap size={10}/>1</span></button>
                     </>
                 )}
@@ -185,7 +271,7 @@ export const DaimyoListModal = ({ provinces, daimyoStats, alliances, ceasefires,
       const stats = daimyoStats[id];
       return { id, ...DAIMYO_INFO[id], count, stats };
     })
-    .filter(d => d.stats) // statsが存在するものだけフィルタリング
+    .filter(d => d.stats) 
     .sort((a,b) => (b.stats?.fame || 0) - (a.stats?.fame || 0));
 
   return (
@@ -250,7 +336,6 @@ export const BattleScene = ({ battleData, onFinish }) => {
             else setLogs(prev => [...prev, "日没！ 引き分け（痛み分け）"]);
         } else {
             setRound(r => r + 1);
-            // 簡易戦闘ロジック
             const dmgA = Math.floor(atkTroops * 0.15 * (0.8 + Math.random() * 0.4));
             const dmgD = Math.floor(defTroops * 0.15 * (0.8 + Math.random() * 0.4));
             setAtkTroops(prev => Math.max(0, prev - dmgD));
