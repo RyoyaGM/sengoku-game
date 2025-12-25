@@ -420,12 +420,8 @@ const App = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none text-stone-100 flex flex-col items-center justify-center bg-[#0f172a]">
         
-        {/* 背景画像 */}
-        <div className="absolute inset-0 z-0">
-            <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-40" />
-            <div className="absolute inset-0 bg-sky-900/30 mix-blend-overlay"></div>
-        </div>
-
+        {/* ▼ 修正: 背景の固定画像(二重表示の原因)を削除しました ▼ */}
+        
         <ResourceBar stats={daimyoStats[playerDaimyoId]} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
 
         {/* 編集モード用ボタン (右上に配置) */}
@@ -498,7 +494,6 @@ const App = () => {
 
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
-        {/* ▼ 修正: onFinish時のactionLeftリセットを削除 ▼ */}
         {modalState.type === 'battle' && <BattleScene battleData={modalState.data} onFinish={(res) => {
              const { attacker, defender, attackerAmount } = modalState.data;
              const { attackerRemaining, defenderRemaining } = res;
@@ -527,7 +522,6 @@ const App = () => {
              else showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
              setModalState({ type: null }); 
         }} />}
-        {/* ▲ 修正ここまで ▲ */}
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={handleTroopAction} onCancel={() => setModalState({type: null})} />}
         {modalState.type === 'negotiate' && <NegotiationScene targetDaimyoId={modalState.data.targetId} targetDaimyo={DAIMYO_INFO[modalState.data.targetId]} isAllied={alliances[playerDaimyoId]?.includes(modalState.data.targetId)} onConfirm={(t) => {
             const p = provinces.find(x => x.id === modalState.data.provinceId);
