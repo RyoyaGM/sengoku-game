@@ -1,7 +1,9 @@
 // src/data/provinces.js
 
 export const SEA_ROUTES = [
-    ['usukeshi', 'tsugaru'], // 津軽海峡
+    ['usukeshi', 'tsugaru'], // 津軽海峡（函館-青森）
+    ['usukeshi', 'sannohe'], // 津軽海峡（函館-下北）
+    ['matsumae', 'tsugaru'], // 津軽海峡（松前-十三湊/青森）
     ['sado', 'kasugayama'],  // 佐渡航路
     ['oki', 'gassan-toda'],  // 隠岐航路
     ['sumoto', 'hyogo'],     // 明石海峡
@@ -20,17 +22,28 @@ export const SEA_ROUTES = [
 
 export const PROVINCE_DATA_BASE = [
   // --- 北海道 (蝦夷地) ---
-  { id: 'matsumae', name: '徳山', ownerId: 'Kakizaki', troops: 300, cx: 1750, cy: 50, neighbors: ['usukeshi', 'kudo'], commerce: 40, agriculture: 20, defense: 50 },
-  { id: 'usukeshi', name: '宇須岸', ownerId: 'Kono', troops: 200, cx: 1810, cy: 80, neighbors: ['matsumae', 'sannohe', 'tsugaru', 'ishikari'], commerce: 60, agriculture: 10, defense: 30 },
-  { id: 'kudo', name: '久遠', ownerId: 'Kakizaki', troops: 200, cx: 1690, cy: 40, neighbors: ['matsumae'], commerce: 30, agriculture: 20, defense: 30 },
-  { id: 'ishikari', name: '石狩', ownerId: 'Ainu', troops: 400, cx: 1870, cy: 30, neighbors: ['usukeshi', 'soya'], commerce: 30, agriculture: 10, defense: 10 },
-  { id: 'soya', name: '宗谷', ownerId: 'Ainu', troops: 200, cx: 1900, cy: -20, neighbors: ['ishikari'], commerce: 50, agriculture: 5, defense: 10 },
+  // 【内実修正】石高を極限まで下げ、商業を大幅強化。米を買って戦う地域性を表現。
+  
+  // 徳山（松前）: 蠣崎本拠。米は取れない(5)が、対岸貿易で栄える(80)。
+  { id: 'matsumae', name: '徳山', ownerId: 'Kakizaki', troops: 400, cx: 1730, cy: 90, neighbors: ['usukeshi', 'kudo', 'tsugaru'], commerce: 80, agriculture: 5, defense: 40 },
+  
+  // 宇須岸（函館）: 天然の良港。商業価値が高い(90)。
+  { id: 'usukeshi', name: '宇須岸', ownerId: 'Kakizaki', troops: 300, cx: 1810, cy: 70, neighbors: ['matsumae', 'sannohe', 'tsugaru', 'ishikari'], commerce: 90, agriculture: 2, defense: 30 },
+  
+  // 久遠（上ノ国）: 日本海側交易拠点。
+  { id: 'kudo', name: '久遠', ownerId: 'Kakizaki', troops: 200, cx: 1670, cy: 40, neighbors: ['matsumae', 'ishikari'], commerce: 60, agriculture: 5, defense: 30 },
+  
+  // 石狩: アイヌの鮭交易の中心地。農業皆無(2)だが資源豊富(70)。
+  { id: 'ishikari', name: '石狩', ownerId: 'Ainu', troops: 500, cx: 1850, cy: 20, neighbors: ['usukeshi', 'soya', 'kudo'], commerce: 70, agriculture: 2, defense: 20 },
+  
+  // 宗谷: 北方交易の窓口。
+  { id: 'soya', name: '宗谷', ownerId: 'Ainu', troops: 300, cx: 1880, cy: -30, neighbors: ['ishikari'], commerce: 60, agriculture: 0, defense: 10 },
 
   // --- 東北 (奥羽) ---
-  { id: 'tsugaru', name: '津軽', ownerId: 'Nanbu', troops: 400, cx: 1750, cy: 120, neighbors: ['usukeshi', 'sannohe', 'akita'], commerce: 40, agriculture: 40, defense: 40 },
-  { id: 'sannohe', name: '三戸', ownerId: 'Nanbu', troops: 600, cx: 1800, cy: 150, neighbors: ['tsugaru', 'usukeshi', 'rikuchu'], commerce: 30, agriculture: 50, defense: 50 },
-  { id: 'rikuchu', name: '陸中', ownerId: 'Nanbu', troops: 500, cx: 1800, cy: 250, neighbors: ['sannohe', 'senboku', 'rikuzen'], commerce: 30, agriculture: 40, defense: 40 },
-  { id: 'akita', name: '湊', ownerId: 'Ando', troops: 400, cx: 1680, cy: 230, neighbors: ['tsugaru', 'senboku', 'shonai'], commerce: 70, agriculture: 40, defense: 30 },
+  { id: 'tsugaru', name: '津軽', ownerId: 'Nanbu', troops: 400, cx: 1750, cy: 130, neighbors: ['usukeshi', 'matsumae', 'sannohe', 'akita'], commerce: 50, agriculture: 50, defense: 40 },
+  { id: 'sannohe', name: '三戸', ownerId: 'Nanbu', troops: 600, cx: 1800, cy: 160, neighbors: ['tsugaru', 'usukeshi', 'rikuchu'], commerce: 30, agriculture: 50, defense: 50 },
+  { id: 'rikuchu', name: '陸中', ownerId: 'Nanbu', troops: 500, cx: 1800, cy: 260, neighbors: ['sannohe', 'senboku', 'rikuzen'], commerce: 30, agriculture: 40, defense: 40 },
+  { id: 'akita', name: '湊', ownerId: 'Ando', troops: 400, cx: 1680, cy: 230, neighbors: ['tsugaru', 'senboku', 'shonai'], commerce: 80, agriculture: 40, defense: 30 }, // 湊（土崎）も日本海交易の要所なので商業高め
   { id: 'senboku', name: '仙北', ownerId: 'Onodera', troops: 300, cx: 1720, cy: 260, neighbors: ['akita', 'rikuchu', 'mogami'], commerce: 20, agriculture: 40, defense: 40 },
   { id: 'shonai', name: '庄内', ownerId: 'Daihoji', troops: 300, cx: 1640, cy: 320, neighbors: ['akita', 'mogami', 'kasugayama'], commerce: 60, agriculture: 70, defense: 30 },
   { id: 'mogami', name: '最上', ownerId: 'Mogami', troops: 500, cx: 1700, cy: 330, neighbors: ['senboku', 'shonai', 'yonezawa', 'rikuzen'], commerce: 50, agriculture: 60, defense: 40 },
