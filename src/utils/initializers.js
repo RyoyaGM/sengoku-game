@@ -28,11 +28,14 @@ export const INITIAL_ALLIANCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => (
 const setAlliance = (a, b) => { if(INITIAL_ALLIANCES[a]) INITIAL_ALLIANCES[a].push(b); if(INITIAL_ALLIANCES[b]) INITIAL_ALLIANCES[b].push(a); };
 
 // 初期同盟の設定
-// ★変更点: 織田(Oda)と徳川(Tokugawa)の同盟を削除しました
 setAlliance('Takeda', 'Hojo'); 
 setAlliance('Takeda', 'Imagawa'); 
 setAlliance('Hojo', 'Imagawa');
 setAlliance('Azai', 'Asakura');
+
+// ★追加: 織水同盟 (織田 - 水野)
+// これにより知多半島が安全地帯となり、織田が東へ無闇に拡大するのを防ぎます
+setAlliance('Oda', 'Mizuno');
 
 // --- 停戦・外交関係 ---
 export const INITIAL_CEASEFIRES = Object.keys(DAIMYO_INFO).reduce((acc, key) => ({...acc, [key]: {}}), {});
@@ -44,10 +47,24 @@ const getInitialRelations = () => {
         rel[id] = {};
         ids.forEach(target => {
             if (id === target) return;
-            let val = 50;
-            // 同盟削除に伴い、初期友好度も調整
+            let val = 50; // デフォルトは50
+            
+            // 同盟関係がある場合は友好度高め
+            if (INITIAL_ALLIANCES[id] && INITIAL_ALLIANCES[id].includes(target)) {
+                val = 80;
+            }
+
+            // 個別の調整
             if (id === 'Takeda' && target === 'Hojo') val = 90;
             if ((id === 'Oda' && target === 'Imagawa') || (id === 'Takeda' && target === 'Uesugi')) val = 10;
+
+            // ★追加: 織田と徳川の微妙な関係 (清州同盟前)
+            // 敵対はしていないが同盟も組んでいない状態。
+            // 65程度あれば、AIは他の敵対勢力（今川や斎藤など関係値の低い相手）を優先して攻撃する傾向になります。
+            if ((id === 'Oda' && target === 'Tokugawa') || (id === 'Tokugawa' && target === 'Oda')) {
+                val = 65; 
+            }
+
             rel[id][target] = val;
         });
     });
