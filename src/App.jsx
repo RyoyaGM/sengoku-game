@@ -188,11 +188,12 @@ const App = () => {
           
           const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
           
+          // ▼ 修正: AIが行動するためのリソース温存ラインを全体的に引き下げ
           const params = {
-              aggressive: { attackChance: 0.8, recruitThreshold: 400, safetyMargin: 0.4, goldReserve: 300, riceReserve: 300 },
-              balanced:   { attackChance: 0.5, recruitThreshold: 500, safetyMargin: 0.8, goldReserve: 1000, riceReserve: 1000 },
-              defensive:  { attackChance: 0.2, recruitThreshold: 700, safetyMargin: 1.2, goldReserve: 2000, riceReserve: 2000 },
-              ainu:       { attackChance: 0.0, recruitThreshold: 800, safetyMargin: 1.5, goldReserve: 3000, riceReserve: 3000 }
+              aggressive: { attackChance: 0.8, recruitThreshold: 400, safetyMargin: 0.4, goldReserve: 50, riceReserve: 50 },
+              balanced:   { attackChance: 0.5, recruitThreshold: 500, safetyMargin: 0.8, goldReserve: 200, riceReserve: 200 },
+              defensive:  { attackChance: 0.2, recruitThreshold: 700, safetyMargin: 1.2, goldReserve: 500, riceReserve: 500 },
+              ainu:       { attackChance: 0.0, recruitThreshold: 800, safetyMargin: 1.5, goldReserve: 1000, riceReserve: 1000 }
           };
           const prm = params[strategy] || params.balanced;
 
