@@ -1,4 +1,3 @@
-// src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
 import { COSTS } from './data/constants';
@@ -100,6 +99,7 @@ const App = () => {
       if (turnOrder.length === 0 || currentTurnIndex === -1) return;
       if (currentTurnIndex >= turnOrder.length) { setTurn(t => t + 1); return; }
       const currentDaimyo = turnOrder[currentTurnIndex];
+      // 既に滅亡している大名はスキップ
       if (!provinces.some(p => p.ownerId === currentDaimyo)) { advanceTurn(); return; }
       
       if (currentDaimyo === playerDaimyoId) {
@@ -114,10 +114,29 @@ const App = () => {
   }, [currentTurnIndex, turnOrder, isPaused]); 
 
   // 3. Helper Logic
-  const showLog = (text) => { setLastLog(text); setLogs(prev => [...prev, `${getFormattedDate(turn)}: ${text}`]); };
+  // 【修正】ログが無限に増えないように制限（最大100件）
+  const showLog = (text) => { 
+      setLastLog(text); 
+      setLogs(prev => {
+          const newLogs = [...prev, `${getFormattedDate(turn)}: ${text}`];
+          if (newLogs.length > 100) return newLogs.slice(newLogs.length - 100);
+          return newLogs;
+      }); 
+  };
   
   const updateResource = (id, g, r, f=0, d=0) => {
-      setDaimyoStats(prev => ({...prev, [id]: { ...prev[id], gold: Math.max(0,(prev[id].gold||0)+g), rice: Math.max(0,(prev[id].rice||0)+r), fame: Math.max(0,(prev[id].fame||0)+f) }}));
+      setDaimyoStats(prev => {
+          if (!prev[id]) return prev; // 念のため存在確認
+          return {
+              ...prev, 
+              [id]: { 
+                  ...prev[id], 
+                  gold: Math.max(0,(prev[id].gold||0)+g), 
+                  rice: Math.max(0,(prev[id].rice||0)+r), 
+                  fame: Math.max(0,(prev[id].fame||0)+f) 
+              }
+          };
+      });
   };
   const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
   const consumeAction = (pid) => setProvinces(prev => prev.map(p => p.id === pid ? { ...p, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
@@ -206,11 +225,13 @@ const App = () => {
           const originalRice = rice;
           const originalFame = fame;
           
-          const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
-          const targetProvinceId = DAIMYO_INFO[aiId]?.targetProvince; 
+          // 【安全対策】DAIMYO_INFO[aiId]が存在しない場合はデフォルトを使用
+          const daimyoInfo = DAIMYO_INFO[aiId] || { strategy: 'balanced', targetProvince: null, homeProvinceId: null, name: aiId };
+          const strategy = daimyoInfo.strategy || 'balanced';
+          const targetProvinceId = daimyoInfo.targetProvince; 
           
-          // 【追加】発祥地IDの取得
-          const homeProvinceId = DAIMYO_INFO[aiId]?.homeProvinceId;
+          // 発祥地IDの取得
+          const homeProvinceId = daimyoInfo.homeProvinceId;
           
           const params = {
               aggressive: { attackChance: 0.9, recruitThreshold: 400, goldReserve: 50, riceReserve: 50, sendRatio: 0.8, winThreshold: 1.1 },
@@ -237,16 +258,16 @@ const App = () => {
           const hasTarget = targetProvinceId && myProvinces.some(p => p.id === targetProvinceId);
           const targetProvData = targetProvinceId ? next.find(p => p.id === targetProvinceId) : null;
           
-          // 【追加】発祥地が他国に奪われているか？
-          const homeProvData = next.find(p => p.id === homeProvinceId);
+          // 発祥地が他国に奪われているか？
+          const homeProvData = homeProvinceId ? next.find(p => p.id === homeProvinceId) : null;
           const isHomeLost = homeProvData && homeProvData.ownerId !== aiId;
 
           myProvinces.forEach(p => {
               while (p.actionsLeft > 0) {
-                  // 【追加】現在地が発祥地か？
-                  const isMyHome = p.id === homeProvinceId;
+                  // 現在地が発祥地か？
+                  const isMyHome = homeProvinceId && p.id === homeProvinceId;
                   
-                  // 【追加】発祥地なら防衛基準を引き上げる
+                  // 発祥地なら防衛基準を引き上げる
                   const localRecruitThreshold = isMyHome ? prm.recruitThreshold * 1.5 : prm.recruitThreshold;
                   const localDefenseThreshold = isMyHome ? 80 : 60; // 発祥地は防御80まで強化
 
@@ -324,7 +345,7 @@ const App = () => {
 
                   if (attackTroops > 100 && rice >= COSTS.attack.rice + prm.riceReserve) {
                       
-                      // 【追加】最優先：奪われた発祥地への攻撃（奪還）
+                      // 最優先：奪われた発祥地への攻撃（奪還）
                       if (isHomeLost) {
                           const homeTarget = enemies.find(e => e.id === homeProvinceId);
                           if (homeTarget) {
@@ -376,7 +397,7 @@ const App = () => {
                       if (rel > 20) canAttack = false;
                   }
 
-                  // 【追加】奪還戦なら攻撃確率100% (躊躇しない)
+                  // 奪還戦なら攻撃確率100%
                   const isReconquest = target && target.id === homeProvinceId;
                   const finalAttackChance = isReconquest ? 1.0 : prm.attackChance;
 
@@ -397,7 +418,9 @@ const App = () => {
                           target.ownerId = aiId;
                           target.troops = Math.max(1, atk);
                           target.actionsLeft = 0;
-                          showLog(`${DAIMYO_INFO[aiId].name}が${target.name}を制圧！`);
+                          // 安全対策
+                          const daimyoName = DAIMYO_INFO[aiId]?.name || aiId;
+                          showLog(`${daimyoName}が${target.name}を制圧！`);
                           
                           fame += 5; 
                           setTimeout(() => updateResource(oldOwner, 0, 0, -5), 0);
@@ -796,24 +819,28 @@ const App = () => {
              }));
              
              if (defenderRemaining <= 0) {
-                 showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍が${defender.name}を制圧！`);
+                 const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
+                 showLog(`${attackerName}軍が${defender.name}を制圧！`);
                  updateResource(attacker.ownerId, 0, 0, 5); 
                  
-                 // 【追加】発祥地を奪われた場合の名声ペナルティ
-                 if (DAIMYO_INFO[defender.ownerId] && DAIMYO_INFO[defender.ownerId].homeProvinceId === defender.id) {
+                 // 【安全対策】発祥地を奪われた場合の名声ペナルティ
+                 const defenderInfo = DAIMYO_INFO[defender.ownerId];
+                 if (defenderInfo && defenderInfo.homeProvinceId === defender.id) {
                      updateResource(defender.ownerId, 0, 0, -10);
-                     showLog(`${DAIMYO_INFO[defender.ownerId].name}家、本拠地陥落...名声失墜！`);
+                     showLog(`${defenderInfo.name}家、本拠地陥落...名声失墜！`);
                  } else {
                      updateResource(defender.ownerId, 0, 0, -5); 
                  }
              }
              else if (attackerRemaining <= 0) {
-                 showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}攻略に失敗。`);
+                 const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
+                 showLog(`${attackerName}軍、${defender.name}攻略に失敗。`);
                  updateResource(attacker.ownerId, 0, 0, -5); 
                  updateResource(defender.ownerId, 0, 0, 5); 
              }
              else {
-                 showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
+                 const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
+                 showLog(`${attackerName}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
                  updateResource(attacker.ownerId, 0, 0, -5); 
                  updateResource(defender.ownerId, 0, 0, 5); 
              }
