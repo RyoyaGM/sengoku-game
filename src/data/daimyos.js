@@ -2,22 +2,23 @@
 
 export const DAIMYO_INFO = {
   // --- 主要大名 (天下を狙う好戦派) ---
-  Oda: { name: '織田', color: 'bg-red-600', fill: '#dc2626', text: 'text-white', difficulty: '中', strategy: 'aggressive' },
-  Takeda: { name: '武田', color: 'bg-orange-600', fill: '#ea580c', text: 'text-white', difficulty: '易', strategy: 'aggressive' },
-  Uesugi: { name: '上杉', color: 'bg-blue-600', fill: '#2563eb', text: 'text-white', difficulty: '易', strategy: 'aggressive' },
-  Hojo: { name: '北条', color: 'bg-yellow-500', fill: '#eab308', text: 'text-black', difficulty: '易', strategy: 'aggressive' },
-  Mori: { name: '毛利', color: 'bg-emerald-600', fill: '#059669', text: 'text-white', difficulty: '易', strategy: 'aggressive' },
-  Shimazu: { name: '島津', color: 'bg-rose-900', fill: '#881337', text: 'text-white', difficulty: '中', strategy: 'aggressive' },
-  Date: { name: '伊達', color: 'bg-green-600', fill: '#16a34a', text: 'text-white', difficulty: '中', strategy: 'aggressive' },
-  Miyoshi: { name: '三好', color: 'bg-purple-500', fill: '#a855f7', text: 'text-white', difficulty: '易', strategy: 'aggressive' },
-  Otomo: { name: '大友', color: 'bg-yellow-600', fill: '#ca8a04', text: 'text-white', difficulty: '中', strategy: 'aggressive' },
+  // 目標(targetProvince)を設定: 基本的に上洛(kyoto)だが、地方統一を目指す大名も設定
+  Oda: { name: '織田', color: 'bg-red-600', fill: '#dc2626', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'kyoto' },
+  Takeda: { name: '武田', color: 'bg-orange-600', fill: '#ea580c', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto' },
+  Uesugi: { name: '上杉', color: 'bg-blue-600', fill: '#2563eb', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto' },
+  Hojo: { name: '北条', color: 'bg-yellow-500', fill: '#eab308', text: 'text-black', difficulty: '易', strategy: 'aggressive', targetProvince: 'umayabashi' }, // 関東制覇
+  Mori: { name: '毛利', color: 'bg-emerald-600', fill: '#059669', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto' },
+  Shimazu: { name: '島津', color: 'bg-rose-900', fill: '#881337', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata' }, // 九州統一
+  Date: { name: '伊達', color: 'bg-green-600', fill: '#16a34a', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'kurokawa' }, // 南下
+  Miyoshi: { name: '三好', color: 'bg-purple-500', fill: '#a855f7', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto' },
+  Otomo: { name: '大友', color: 'bg-yellow-600', fill: '#ca8a04', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata' },
 
   // --- 実力者 (バランス型) ---
-  Tokugawa: { name: '松平', color: 'bg-blue-800', fill: '#1e40af', text: 'text-white', difficulty: '難', strategy: 'balanced' },
-  Imagawa: { name: '今川', color: 'bg-emerald-800', fill: '#065f46', text: 'text-white', difficulty: '中', strategy: 'balanced' },
+  Tokugawa: { name: '松平', color: 'bg-blue-800', fill: '#1e40af', text: 'text-white', difficulty: '難', strategy: 'balanced', targetProvince: 'kyoto' },
+  Imagawa: { name: '今川', color: 'bg-emerald-800', fill: '#065f46', text: 'text-white', difficulty: '中', strategy: 'balanced', targetProvince: 'kyoto' },
   Honganji: { name: '本願寺', color: 'bg-orange-300', fill: '#fdba74', text: 'text-black', difficulty: '中', strategy: 'defensive' },
-  Ryuzoji: { name: '龍造寺', color: 'bg-red-800', fill: '#991b1b', text: 'text-white', difficulty: '中', strategy: 'aggressive' },
-  Chosokabe: { name: '長曾我部', color: 'bg-purple-700', fill: '#7e22ce', text: 'text-white', difficulty: '中', strategy: 'aggressive' },
+  Ryuzoji: { name: '龍造寺', color: 'bg-red-800', fill: '#991b1b', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata' },
+  Chosokabe: { name: '長曾我部', color: 'bg-purple-700', fill: '#7e22ce', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'imabari' }, // 四国統一
   Satake: { name: '佐竹', color: 'bg-red-900', fill: '#7f1d1d', text: 'text-white', difficulty: '中', strategy: 'balanced' },
   Ukita: { name: '宇喜多', color: 'bg-yellow-300', fill: '#fde047', text: 'text-black', difficulty: '中', strategy: 'balanced' },
   Rokkaku: { name: '六角', color: 'bg-indigo-400', fill: '#818cf8', text: 'text-white', difficulty: '中', strategy: 'defensive' },
@@ -26,7 +27,6 @@ export const DAIMYO_INFO = {
   // --- その他大名 ---
   Ashikaga: { name: '足利', color: 'bg-slate-800', fill: '#1e293b', text: 'text-white', difficulty: '難', strategy: 'defensive' },
   Kakizaki: { name: '蠣崎', color: 'bg-teal-700', fill: '#0f766e', text: 'text-white', difficulty: '難', strategy: 'defensive' },
-  // ▼ 変更: アイヌを特殊戦略に変更
   Ainu: { name: 'アイヌ', color: 'bg-stone-500', fill: '#78716c', text: 'text-white', difficulty: '特殊', strategy: 'ainu' },
   Nanbu: { name: '南部', color: 'bg-indigo-300', fill: '#a5b4fc', text: 'text-black', difficulty: '中', strategy: 'balanced' },
   Ando: { name: '安東', color: 'bg-cyan-800', fill: '#155e75', text: 'text-white', difficulty: '中', strategy: 'balanced' },

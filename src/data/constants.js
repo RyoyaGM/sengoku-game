@@ -3,8 +3,10 @@
 // コスト定義（action: 1 は行動力消費あり、0 はなし）
 export const COSTS = {
   // 内政
+  // ▼ 変更: 開発と開墾の効果を+25から+10へ下方修正
   develop: { gold: 100, rice: 0, boost: 10, action: 1 },
   cultivate: { gold: 50, rice: 50, boost: 10, action: 1 },
+  
   pacify: { gold: 50, rice: 100, boost: 15, action: 1 },
   fortify: { gold: 80, rice: 0, boost: 10, action: 1 },
   market: { gold: 0, rice: 0, action: 0 }, // 楽市楽座はフリーアクション
