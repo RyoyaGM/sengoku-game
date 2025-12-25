@@ -1755,38 +1755,27 @@ const App = () => {
 
 
 
-  const handleDiplomacy = (type, pidOrTargetId) => {
-
+ const handleDiplomacy = (type, targetDaimyoId) => {
       const p = provinces.find(x => x.id === selectedProvinceId);
-
-      if (p && p.actionsLeft <= 0) return showLog("行動力不足"); // 外交の入り口でチェック（ただし交渉画面を開くのはタダにしたい場合はここを緩める）
-
-
+      if (p && p.actionsLeft <= 0) return showLog("行動力不足"); 
 
       if (type === 'alliance') {
-
-         const targetId = provinces.find(x => x.id === pidOrTargetId)?.ownerId;
-
+         // 修正箇所: ここで targetDaimyoId をそのまま使います（以前はprovinces.findして未定義になっていました）
          const cost = 500;
-
          if (daimyoStats[playerDaimyoId].gold < cost) return showLog("金不足");
-
+         
          updateResource(playerDaimyoId, -cost, 0);
-
-         setAlliances(prev => ({...prev, [playerDaimyoId]: [...prev[playerDaimyoId], targetId], [targetId]: [...prev[targetId], playerDaimyoId]}));
-
-         showLog("同盟締結"); consumeAction(selectedProvinceId);
-
+         setAlliances(prev => ({
+             ...prev, 
+             [playerDaimyoId]: [...(prev[playerDaimyoId] || []), targetDaimyoId], 
+             [targetDaimyoId]: [...(prev[targetDaimyoId] || []), playerDaimyoId]
+         }));
+         showLog("同盟締結"); 
+         consumeAction(selectedProvinceId);
       }
-
       if (type === 'negotiate') {
-
-          // 交渉画面を開くのはタダにするため、ここでは消費しない
-
-          setModalState({ type: 'negotiate', data: { targetId: pidOrTargetId, provinceId: selectedProvinceId } });
-
+          setModalState({ type: 'negotiate', data: { targetId: targetDaimyoId, provinceId: selectedProvinceId } });
       }
-
   };
 
 
