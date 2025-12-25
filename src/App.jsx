@@ -5,187 +5,14 @@ import { Sword, Shield, ScrollText, RefreshCw, Trophy, Skull, Coins, Wheat, Hamm
 import { DAIMYO_INFO, TITLES, COURT_RANKS, HISTORICAL_FAME } from './data/daimyos';
 import { PROVINCE_DATA_BASE, SEA_ROUTES } from './data/provinces';
 import { COSTS } from './data/constants';
-
-
-// --- 定数・ヘルパー関数 ---
-
-
-
-const getFormattedDate = (turn) => {
-
-  const startYear = 1560;
-
-  const elapsedYears = Math.floor((turn - 1) / 4);
-
-  const seasonIdx = (turn - 1) % 4;
-
-  const seasons = ['春', '夏', '秋', '冬'];
-
-  return `${startYear + elapsedYears}年 ${seasons[seasonIdx]}`;
-
-};
-
-
-
-const getRiceMarketPrice = (turn) => {
-
-  const seasonIdx = (turn - 1) % 4;
-
-  const prices = [1.5, 2.0, 0.6, 1.0]; // 春, 夏, 秋, 冬
-
-  return prices[seasonIdx] || 1.0;
-
-};
-
-
-
-const getDistance = (p1, p2) => {
-
-    return Math.sqrt(Math.pow(p1.cx - p2.cx, 2) + Math.pow(p1.cy - p2.cy, 2));
-
-};
-
-
-
-
-const INITIAL_RESOURCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => {
-
-  const baseFame = HISTORICAL_FAME[key] || 50;
-
-  acc[key] = { gold: 300, rice: 300, fame: baseFame, donatedImperial: 0, donatedShogunate: 0, titles: [], rank: null };
-
-  return acc;
-
-}, {});
-
-
-
-if(INITIAL_RESOURCES['Ashikaga']) { INITIAL_RESOURCES['Ashikaga'].gold = 1000; INITIAL_RESOURCES['Ashikaga'].titles = ['征夷大将軍']; INITIAL_RESOURCES['Ashikaga'].rank = '従三位'; }
-
-if(INITIAL_RESOURCES['Sho']) { INITIAL_RESOURCES['Sho'].titles = ['琉球王']; }
-
-if(INITIAL_RESOURCES['Ryukyu_Sho']) { INITIAL_RESOURCES['Ryukyu_Sho'].titles = ['琉球王']; }
-
-if(INITIAL_RESOURCES['Kitabatake']) { INITIAL_RESOURCES['Kitabatake'].titles = []; INITIAL_RESOURCES['Kitabatake'].rank = '従五位下'; }
-
-
-
-const INITIAL_ALLIANCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => ({...acc, [key]: []}), {});
-
-const setAlliance = (a, b) => { if(INITIAL_ALLIANCES[a]) INITIAL_ALLIANCES[a].push(b); if(INITIAL_ALLIANCES[b]) INITIAL_ALLIANCES[b].push(a); };
-
-setAlliance('Takeda', 'Hojo'); setAlliance('Takeda', 'Imagawa'); setAlliance('Hojo', 'Imagawa');
-
-setAlliance('Oda', 'Tokugawa'); setAlliance('Azai', 'Asakura');
-
-
-
-const INITIAL_CEASEFIRES = Object.keys(DAIMYO_INFO).reduce((acc, key) => ({...acc, [key]: {}}), {});
-
-
-
-const getInitialRelations = () => {
-
-    const rel = {};
-
-    const ids = Object.keys(DAIMYO_INFO);
-
-    ids.forEach(id => {
-
-        rel[id] = {};
-
-        ids.forEach(target => {
-
-            if (id === target) return;
-
-            let val = 50;
-
-            if ((id === 'Oda' && target === 'Tokugawa') || (id === 'Takeda' && target === 'Hojo')) val = 90;
-
-            if ((id === 'Oda' && target === 'Imagawa') || (id === 'Takeda' && target === 'Uesugi')) val = 10;
-
-            rel[id][target] = val;
-
-        });
-
-    });
-
-    return rel;
-
-};
-
-const INITIAL_RELATIONS = getInitialRelations();
-
-
-
-
-// データの整合性チェック・自動修正
-
-function validateAndFixData(db) {
-
-    const idMap = new Map();
-
-    db.forEach(p => idMap.set(p.id, p));
-
-
-
-    db.forEach(p => {
-
-        p.neighbors.forEach(neighborId => {
-
-            const neighbor = idMap.get(neighborId);
-
-            if (neighbor) {
-
-                if (!neighbor.neighbors.includes(p.id)) {
-
-                    neighbor.neighbors.push(p.id); // 相互リンクを自動追加
-
-                }
-
-            } else {
-
-                console.error(`Error: Province ${p.id} references missing neighbor ${neighborId}`);
-
-            }
-
-        });
-
-    });
-
-    // console.log("Province data validation complete.");
-
-}
-
-
-
-// 起動時にデータを修正
-
-validateAndFixData(PROVINCE_DATA_BASE);
-
-
-
-const INITIAL_PROVINCES = PROVINCE_DATA_BASE.map(p => ({
-
-  ...p,
-
-  cx: p.cx * 2, cy: p.cy * 2,
-
-  troops: p.troops || 500,
-
-  commerce: p.commerce || 40,
-
-  agriculture: p.agriculture || 40,
-
-  defense: p.defense || 30,
-
-  loyalty: 60, training: 50, actionsLeft: 3
-
-}));
-
-
-
-
+import { getFormattedDate, getRiceMarketPrice, getDistance } from './utils/helpers';
+import { 
+  INITIAL_RESOURCES, 
+  INITIAL_ALLIANCES, 
+  INITIAL_CEASEFIRES, 
+  INITIAL_RELATIONS, 
+  INITIAL_PROVINCES 
+} from './utils/initializers';
 
 // --- UI コンポーネント ---
 
@@ -1443,6 +1270,10 @@ const App = () => {
 
 
 
+// src/App.jsx 内の processAiTurn 関数を置換
+
+// src/App.jsx
+
   const processAiTurn = (aiId) => {
       setProvinces(curr => {
           const next = curr.map(p => ({...p}));
@@ -1755,7 +1586,7 @@ const App = () => {
 
 
 
- const handleDiplomacy = (type, targetDaimyoId) => {
+const handleDiplomacy = (type, targetDaimyoId) => {
       const p = provinces.find(x => x.id === selectedProvinceId);
       if (p && p.actionsLeft <= 0) return showLog("行動力不足"); 
 
@@ -1777,7 +1608,6 @@ const App = () => {
           setModalState({ type: 'negotiate', data: { targetId: targetDaimyoId, provinceId: selectedProvinceId } });
       }
   };
-
 
 
   // 5. Render
