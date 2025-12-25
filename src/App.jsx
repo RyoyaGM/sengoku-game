@@ -124,7 +124,8 @@ const App = () => {
 
   const advanceTurn = () => { setSelectedProvinceId(null); setAttackSourceId(null); setTransportSourceId(null); setCurrentTurnIndex(prev => prev + 1); };
 
-const processAiTurn = (aiId) => {
+// AIのターン処理 (備蓄・緊急事態判断版)
+  const processAiTurn = (aiId) => {
       setProvinces(curr => {
           const next = curr.map(p => ({...p}));
           let { gold, rice, fame } = daimyoStats[aiId] || { gold:0, rice:0, fame: 0 };
@@ -134,24 +135,25 @@ const processAiTurn = (aiId) => {
           
           const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
           
-          // 戦略別パラメータ定義
-          // safetyMargin: 周囲の脅威(敵最大兵数)に対して、自国に最低限残そうとする兵数の割合
-          // (守勢なら敵と同数以上を残そうとし、好戦的ならリスクを取って攻める)
+          // 戦略別パラメータ (Reserve: この数値を下回ってまで内政や攻撃をしない)
           const params = {
-              aggressive: { attackChance: 0.8, recruitThreshold: 400, saveRice: false, safetyMargin: 0.4 },
-              balanced:   { attackChance: 0.5, recruitThreshold: 500, saveRice: false, safetyMargin: 0.7 },
-              defensive:  { attackChance: 0.2, recruitThreshold: 700, saveRice: true,  safetyMargin: 1.0 }
+              aggressive: { attackChance: 0.8, recruitThreshold: 400, safetyMargin: 0.4, goldReserve: 300, riceReserve: 300 },
+              balanced:   { attackChance: 0.5, recruitThreshold: 500, safetyMargin: 0.8, goldReserve: 1000, riceReserve: 1000 },
+              defensive:  { attackChance: 0.2, recruitThreshold: 700, safetyMargin: 1.2, goldReserve: 2000, riceReserve: 2000 }
           };
           const prm = params[strategy];
 
-          // 1. 市場介入
+          // 1. 市場介入 (備蓄を維持するための売買)
           const marketPrice = getRiceMarketPrice(turn);
-          if (gold > 1000 && rice < 300) {
+          // 備蓄割れ＆金に余裕があれば米を買う
+          if (gold > prm.goldReserve * 1.5 && rice < prm.riceReserve) {
               const buyAmount = 200;
               const cost = Math.floor(buyAmount * marketPrice * 1.2);
-              if (gold > cost) { gold -= cost; rice += buyAmount; }
-          } else if (rice > 1500 && gold < 300 && !prm.saveRice) {
-              const sellAmount = 300;
+              if (gold > cost + prm.goldReserve) { gold -= cost; rice += buyAmount; }
+          } 
+          // 備蓄割れ＆米に余裕があれば売って金にする
+          else if (rice > prm.riceReserve * 1.5 && gold < prm.goldReserve) {
+              const sellAmount = 200;
               const gain = Math.floor(sellAmount * marketPrice * 0.8);
               rice -= sellAmount; gold += gain;
           }
@@ -164,33 +166,41 @@ const processAiTurn = (aiId) => {
                   const enemies = neighbors.filter(n => n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
                   const isFrontline = enemies.length > 0;
 
-                  // --- 新ロジック: 脅威度評価と防衛ライン ---
-                  // 1. 周囲の敵の中で最大の兵数を確認（これが「脅威度」）
+                  // 脅威度評価
                   const maxThreat = enemies.length > 0 ? Math.max(...enemies.map(e => e.troops)) : 0;
+                  const requiredDefense = Math.floor(maxThreat * prm.safetyMargin); // 防衛に必要な兵数
                   
-                  // 2. 防衛に残すべき兵数を計算 (脅威度 × 戦略ごとの係数)
-                  // 例: 敵が1000いて、守勢(1.0)なら1000残す。好戦的(0.4)なら400残して残りで攻める。
-                  const requiredDefense = Math.floor(maxThreat * prm.safetyMargin);
-                  
-                  // 3. 攻撃に回せる余剰兵力
-                  const availableForAttack = Math.max(0, p.troops - requiredDefense);
+                  // 緊急事態か？（前線で、かつ兵数が防衛ラインを割っている）
+                  const isEmergency = isFrontline && p.troops < requiredDefense;
 
-                  // 4. 攻撃対象の選定: 余剰兵力の8割程度を投入して勝てる相手がいるか？
+                  // 攻撃可能な余剰兵力
+                  const availableForAttack = Math.max(0, p.troops - requiredDefense);
                   const attackForce = Math.floor(availableForAttack * 0.8);
-                  
-                  // 「余剰兵力」で圧倒できる(自軍の0.9倍以下の兵力の)敵を探す
                   const weakEnemy = enemies.find(e => e.troops < attackForce * 0.9);
 
-                  // A. 軍事行動 (攻撃)
-                  if (weakEnemy && rice >= COSTS.attack.rice && attackForce > 100 && Math.random() < prm.attackChance) {
+                  // --- 行動選択 ---
+
+                  // A. 緊急防衛 (備蓄を無視してでも実行)
+                  if (isEmergency && gold >= COSTS.recruit.gold && rice >= COSTS.recruit.rice) {
+                      gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
+                      p.troops += COSTS.recruit.troops; p.actionsLeft--;
+                      continue;
+                  }
+                  if (isEmergency && p.defense < 30 && gold >= COSTS.fortify.gold) {
+                      gold -= COSTS.fortify.gold; p.defense += COSTS.fortify.boost; p.actionsLeft--;
+                      continue;
+                  }
+
+                  // B. 攻撃 (備蓄と兵糧に余裕がある場合のみ)
+                  // ※攻撃はリスクが高いため、riceReserve をしっかり確保する
+                  if (weakEnemy && rice >= COSTS.attack.rice + prm.riceReserve && attackForce > 100 && Math.random() < prm.attackChance) {
                       rice -= COSTS.attack.rice;
                       p.actionsLeft--;
                       
                       let atk = attackForce; 
-                      p.troops -= atk; // 余剰兵力分だけ減らす（防衛ラインは維持される）
+                      p.troops -= atk; 
                       let def = weakEnemy.troops;
                       
-                      // 簡易戦闘
                       for(let r=0; r<10; r++) {
                           if(atk<=0 || def<=0) break;
                           atk -= Math.floor(def * 0.1); 
@@ -202,53 +212,37 @@ const processAiTurn = (aiId) => {
                           weakEnemy.troops = Math.max(1, atk);
                           weakEnemy.actionsLeft = 0;
                           showLog(`${DAIMYO_INFO[aiId].name}が${weakEnemy.name}を制圧！`);
-                          // 攻撃後はこの国は行動終了とみなす（連戦防止）
-                          p.actionsLeft = 0;
+                          p.actionsLeft = 0; // 攻撃後は休息
                           continue; 
                       } else {
                           weakEnemy.troops = def;
-                          p.troops += Math.floor(atk * 0.5); // 敗走兵の一部が戻る
+                          p.troops += Math.floor(atk * 0.5); 
                       }
                   }
 
-                  // B. 軍事増強 (徴兵)
-                  // 「防衛ラインを割っている」または「閾値以下」の場合に徴兵
-                  else if (isFrontline && (p.troops < requiredDefense || p.troops < prm.recruitThreshold) && gold >= COSTS.recruit.gold && rice >= COSTS.recruit.rice) {
-                      gold -= COSTS.recruit.gold;
-                      rice -= COSTS.recruit.rice;
-                      p.troops += COSTS.recruit.troops;
-                      p.actionsLeft--;
+                  // C. 平時の軍備増強 (備蓄を守りつつ行う)
+                  else if (isFrontline && p.troops < prm.recruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
+                      gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
+                      p.troops += COSTS.recruit.troops; p.actionsLeft--;
                   }
 
-                  // C. 防御 (普請)
-                  else if (isFrontline && p.defense < (strategy === 'defensive' ? 80 : 40) && gold >= COSTS.fortify.gold) {
-                      gold -= COSTS.fortify.gold;
-                      p.defense += COSTS.fortify.boost;
-                      p.actionsLeft--;
-                  }
-
-                  // D. 内政
-                  else if (gold >= COSTS.develop.gold) {
+                  // D. 内政 (余剰資金でのみ行う)
+                  else if (gold >= COSTS.develop.gold + prm.goldReserve) {
                       if (Math.random() > 0.5) {
-                          gold -= COSTS.develop.gold;
-                          p.commerce += COSTS.develop.boost;
-                      } else if (gold >= COSTS.cultivate.gold && rice >= COSTS.cultivate.rice) {
-                          gold -= COSTS.cultivate.gold;
-                          rice -= COSTS.cultivate.rice;
-                          p.agriculture += COSTS.cultivate.boost;
+                          gold -= COSTS.develop.gold; p.commerce += COSTS.develop.boost;
+                      } else if (gold >= COSTS.cultivate.gold && rice >= COSTS.cultivate.rice + prm.riceReserve) {
+                          gold -= COSTS.cultivate.gold; rice -= COSTS.cultivate.rice; p.agriculture += COSTS.cultivate.boost;
                       }
                       p.actionsLeft--;
                   }
                   
-                  // E. 名声 (献金)
-                  else if (gold > 3000) {
-                      const donateAmount = 500;
-                      gold -= donateAmount;
-                      fame += Math.floor(donateAmount / 100);
-                      p.actionsLeft--;
+                  // E. 名声・献金 (大金持ちのみ)
+                  else if (gold > 5000) { 
+                      const donateAmount = 500; gold -= donateAmount; fame += Math.floor(donateAmount / 100); p.actionsLeft--;
                   }
 
                   else {
+                      // 備蓄を守るため、またはやることがない場合は行動終了
                       p.actionsLeft = 0;
                   }
               }
