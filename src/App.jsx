@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
 import { COSTS } from './data/constants';
@@ -208,6 +209,9 @@ const App = () => {
           const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
           const targetProvinceId = DAIMYO_INFO[aiId]?.targetProvince; 
           
+          // 【追加】発祥地IDの取得
+          const homeProvinceId = DAIMYO_INFO[aiId]?.homeProvinceId;
+          
           const params = {
               aggressive: { attackChance: 0.9, recruitThreshold: 400, goldReserve: 50, riceReserve: 50, sendRatio: 0.8, winThreshold: 1.1 },
               balanced:   { attackChance: 0.6, recruitThreshold: 500, goldReserve: 200, riceReserve: 200, sendRatio: 0.6, winThreshold: 1.3 },
@@ -232,9 +236,20 @@ const App = () => {
           const myProvinces = next.filter(p => p.ownerId === aiId);
           const hasTarget = targetProvinceId && myProvinces.some(p => p.id === targetProvinceId);
           const targetProvData = targetProvinceId ? next.find(p => p.id === targetProvinceId) : null;
+          
+          // 【追加】発祥地が他国に奪われているか？
+          const homeProvData = next.find(p => p.id === homeProvinceId);
+          const isHomeLost = homeProvData && homeProvData.ownerId !== aiId;
 
           myProvinces.forEach(p => {
               while (p.actionsLeft > 0) {
+                  // 【追加】現在地が発祥地か？
+                  const isMyHome = p.id === homeProvinceId;
+                  
+                  // 【追加】発祥地なら防衛基準を引き上げる
+                  const localRecruitThreshold = isMyHome ? prm.recruitThreshold * 1.5 : prm.recruitThreshold;
+                  const localDefenseThreshold = isMyHome ? 80 : 60; // 発祥地は防御80まで強化
+
                   const neighbors = p.neighbors.map(nid => next.find(x => x.id === nid)).filter(n => n);
                   const enemies = neighbors.filter(n => n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
                   const isFrontline = enemies.length > 0;
@@ -286,8 +301,8 @@ const App = () => {
                       continue;
                   }
 
-                  // 3. 普請 (Fortify)
-                  if (isFrontline && p.defense < 60 && gold >= COSTS.fortify.gold) {
+                  // 3. 普請 (Fortify) - 発祥地なら優先
+                  if (isFrontline && p.defense < localDefenseThreshold && gold >= COSTS.fortify.gold) {
                       gold -= COSTS.fortify.gold;
                       p.defense += COSTS.fortify.boost;
                       p.actionsLeft--;
@@ -308,26 +323,41 @@ const App = () => {
                   let canAttack = true;
 
                   if (attackTroops > 100 && rice >= COSTS.attack.rice + prm.riceReserve) {
-                      if (targetProvinceId && !hasTarget && targetProvData) {
-                          const directTarget = enemies.find(e => e.id === targetProvinceId);
-                          if (directTarget && directTarget.troops < attackTroops * prm.winThreshold) {
-                              target = directTarget;
-                          } else {
-                              let bestDist = Infinity;
-                              enemies.forEach(e => {
-                                  const dist = Math.sqrt(Math.pow(e.cx - targetProvData.cx, 2) + Math.pow(e.cy - targetProvData.cy, 2));
-                                  if (dist < bestDist && e.troops < attackTroops * prm.winThreshold) {
-                                      bestDist = dist;
-                                      target = e;
-                                  }
-                              });
+                      
+                      // 【追加】最優先：奪われた発祥地への攻撃（奪還）
+                      if (isHomeLost) {
+                          const homeTarget = enemies.find(e => e.id === homeProvinceId);
+                          if (homeTarget) {
+                              // 発祥地奪還なら、多少不利(1.2倍未満)でも攻める
+                              if (homeTarget.troops < attackTroops * 1.2) {
+                                  target = homeTarget;
+                              }
                           }
                       }
-                      
+
+                      // 通常のターゲット選定
                       if (!target) {
-                          const potentialTargets = enemies.filter(e => e.troops < attackTroops * prm.winThreshold);
-                          if (potentialTargets.length > 0) {
-                               target = potentialTargets.sort((a,b) => a.troops - b.troops)[0];
+                          if (targetProvinceId && !hasTarget && targetProvData) {
+                              const directTarget = enemies.find(e => e.id === targetProvinceId);
+                              if (directTarget && directTarget.troops < attackTroops * prm.winThreshold) {
+                                  target = directTarget;
+                              } else {
+                                  let bestDist = Infinity;
+                                  enemies.forEach(e => {
+                                      const dist = Math.sqrt(Math.pow(e.cx - targetProvData.cx, 2) + Math.pow(e.cy - targetProvData.cy, 2));
+                                      if (dist < bestDist && e.troops < attackTroops * prm.winThreshold) {
+                                          bestDist = dist;
+                                          target = e;
+                                      }
+                                  });
+                              }
+                          }
+                          
+                          if (!target) {
+                              const potentialTargets = enemies.filter(e => e.troops < attackTroops * prm.winThreshold);
+                              if (potentialTargets.length > 0) {
+                                   target = potentialTargets.sort((a,b) => a.troops - b.troops)[0];
+                              }
                           }
                       }
                   }
@@ -346,7 +376,11 @@ const App = () => {
                       if (rel > 20) canAttack = false;
                   }
 
-                  if (target && canAttack && Math.random() < prm.attackChance) {
+                  // 【追加】奪還戦なら攻撃確率100% (躊躇しない)
+                  const isReconquest = target && target.id === homeProvinceId;
+                  const finalAttackChance = isReconquest ? 1.0 : prm.attackChance;
+
+                  if (target && canAttack && Math.random() < finalAttackChance) {
                       rice -= COSTS.attack.rice;
                       p.actionsLeft--;
                       let atk = attackTroops; 
@@ -384,8 +418,8 @@ const App = () => {
                       }
                   }
                   
-                  // 通常徴兵
-                  else if (isFrontline && p.troops < prm.recruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
+                  // 通常徴兵 (発祥地は基準が高い)
+                  else if (isFrontline && p.troops < localRecruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
                       p.troops += COSTS.recruit.troops;
                       p.loyalty = Math.max(0, (p.loyalty||50) - 5);
@@ -617,14 +651,12 @@ const App = () => {
         <ResourceBar stats={daimyoStats[playerDaimyoId]} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
 
         <div className="absolute top-20 left-4 z-50">
-            {onSpeedChange && (
-               <SpectatorControls 
-                   aiSpeed={aiSpeed} 
-                   onSpeedChange={setAiSpeed} 
-                   isPaused={isPaused} 
-                   onPauseToggle={handlePauseToggle} 
-               />
-            )}
+            <SpectatorControls 
+                aiSpeed={aiSpeed} 
+                onSpeedChange={setAiSpeed} 
+                isPaused={isPaused} 
+                onPauseToggle={handlePauseToggle} 
+            />
         </div>
 
         <div className="absolute top-20 right-4 z-50 flex gap-2">
@@ -766,7 +798,14 @@ const App = () => {
              if (defenderRemaining <= 0) {
                  showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍が${defender.name}を制圧！`);
                  updateResource(attacker.ownerId, 0, 0, 5); 
-                 updateResource(defender.ownerId, 0, 0, -5); 
+                 
+                 // 【追加】発祥地を奪われた場合の名声ペナルティ
+                 if (DAIMYO_INFO[defender.ownerId] && DAIMYO_INFO[defender.ownerId].homeProvinceId === defender.id) {
+                     updateResource(defender.ownerId, 0, 0, -10);
+                     showLog(`${DAIMYO_INFO[defender.ownerId].name}家、本拠地陥落...名声失墜！`);
+                 } else {
+                     updateResource(defender.ownerId, 0, 0, -5); 
+                 }
              }
              else if (attackerRemaining <= 0) {
                  showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}攻略に失敗。`);
