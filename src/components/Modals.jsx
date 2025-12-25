@@ -1,10 +1,11 @@
 // src/components/Modals.jsx
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, History, XCircle, Scale, Crown, Zap, Landmark, Ship, Star, Handshake, Users, Sword, Shield, RefreshCw, Trophy, Skull, Eye, Scroll, Image as ImageIcon } from 'lucide-react';
+// ▼ 修正: ArrowUp, ArrowDown を追加
+import { MessageCircle, History, XCircle, Scale, Crown, Zap, Landmark, Ship, Star, Handshake, Users, Sword, Shield, RefreshCw, Trophy, Skull, Eye, Scroll, Image as ImageIcon, ArrowUp, ArrowDown } from 'lucide-react';
 import { DAIMYO_INFO, TITLES, COURT_RANKS } from '../data/daimyos';
 import { COSTS } from '../data/constants';
 
-// ▼ 修正: HistoricalEventModal
+// ... (HistoricalEventModal, IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, DonateModal, TradeModal, NegotiationScene は変更なし)
 export const HistoricalEventModal = ({ event, daimyoId, onSelect }) => {
   const isPlayerInvolved = event.choices && event.choices[daimyoId];
   const description = typeof event.description === 'function' ? event.description(daimyoId) : event.description;
@@ -12,18 +13,13 @@ export const HistoricalEventModal = ({ event, daimyoId, onSelect }) => {
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-stone-800 text-white rounded-xl border-2 border-yellow-600 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        
-        {/* ヘッダー */}
         <div className="bg-stone-900 p-4 border-b border-stone-700 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-yellow-500 flex items-center gap-2">
             <Scroll size={24} /> {event.title}
           </h2>
           <div className="text-sm text-stone-400">{event.year}年 {event.season}</div>
         </div>
-
-        {/* 画像エリア */}
         <div className="w-full h-64 bg-stone-900 flex items-center justify-center relative overflow-hidden group">
-             {/* ▼ 修正: 画像があれば表示、なければアイコンを表示 */}
              {event.image ? (
                 <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
              ) : (
@@ -35,12 +31,8 @@ export const HistoricalEventModal = ({ event, daimyoId, onSelect }) => {
              )}
              <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-transparent to-transparent opacity-60"></div>
         </div>
-
-        {/* 内容 */}
         <div className="p-6 flex-1 overflow-y-auto">
           <p className="text-lg leading-relaxed whitespace-pre-wrap mb-6 font-serif">{description}</p>
-          
-          {/* 選択肢 */}
           {isPlayerInvolved ? (
             <div className="space-y-4">
               <div className="text-sm text-yellow-400 mb-2 font-bold flex items-center gap-2"><Zap size={16}/> 運命の決断を下してください</div>
@@ -64,12 +56,7 @@ export const HistoricalEventModal = ({ event, daimyoId, onSelect }) => {
             </div>
           ) : (
             <div className="text-center">
-              <button 
-                onClick={() => onSelect(null)} 
-                className="px-8 py-3 bg-stone-600 hover:bg-stone-500 rounded text-white font-bold border border-stone-500"
-              >
-                閉じる
-              </button>
+              <button onClick={() => onSelect(null)} className="px-8 py-3 bg-stone-600 hover:bg-stone-500 rounded text-white font-bold border border-stone-500">閉じる</button>
             </div>
           )}
         </div>
@@ -78,7 +65,6 @@ export const HistoricalEventModal = ({ event, daimyoId, onSelect }) => {
   );
 };
 
-// ... 他のコンポーネント (IncomingRequestModalなど) は変更なし、そのまま下に続けてください
 export const IncomingRequestModal = ({ request, onAccept, onReject }) => {
   if (!request || !request.sourceId) return null; 
   return (
@@ -263,16 +249,46 @@ export const NegotiationScene = ({ targetDaimyoId, targetDaimyo, isAllied, onCon
     </div>
 );
 
+// ▼ 修正: DaimyoListModal (ソート機能、総兵力追加)
 export const DaimyoListModal = ({ provinces, daimyoStats, alliances, ceasefires, relations, onClose, playerDaimyoId, coalition, onViewOnMap }) => {
+  const [sortConfig, setSortConfig] = useState({ key: 'fame', direction: 'desc' });
+
   const activeDaimyos = Object.keys(DAIMYO_INFO)
     .filter(id => id !== 'Minor')
     .map(id => {
-      const count = provinces.filter(p => p.ownerId === id).length;
+      const owned = provinces.filter(p => p.ownerId === id);
+      const count = owned.length;
+      const totalTroops = owned.reduce((sum, p) => sum + p.troops, 0); // 総兵力
       const stats = daimyoStats[id];
-      return { id, ...DAIMYO_INFO[id], count, stats };
+      return { id, ...DAIMYO_INFO[id], count, totalTroops, stats };
     })
     .filter(d => d.stats) 
-    .sort((a,b) => (b.stats?.fame || 0) - (a.stats?.fame || 0));
+    .sort((a,b) => {
+        let aVal, bVal;
+        if (sortConfig.key === 'fame') { aVal = a.stats?.fame || 0; bVal = b.stats?.fame || 0; }
+        else if (sortConfig.key === 'gold') { aVal = a.stats?.gold || 0; bVal = b.stats?.gold || 0; }
+        else if (sortConfig.key === 'rice') { aVal = a.stats?.rice || 0; bVal = b.stats?.rice || 0; }
+        else if (sortConfig.key === 'count') { aVal = a.count; bVal = b.count; }
+        else if (sortConfig.key === 'troops') { aVal = a.totalTroops; bVal = b.totalTroops; }
+        else return 0;
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+  const requestSort = (key) => {
+      let direction = 'desc';
+      if (sortConfig.key === key && sortConfig.direction === 'desc') {
+          direction = 'asc';
+      }
+      setSortConfig({ key, direction });
+  };
+
+  const SortIcon = ({ column }) => {
+      if (sortConfig.key !== column) return null;
+      return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="inline ml-1"/> : <ArrowDown size={12} className="inline ml-1"/>;
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
@@ -280,12 +296,28 @@ export const DaimyoListModal = ({ provinces, daimyoStats, alliances, ceasefires,
         <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold flex items-center gap-2"><Users size={24} /> 勢力一覧</h3><button onClick={onClose}><XCircle size={24}/></button></div>
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-stone-400 uppercase bg-stone-700 sticky top-0"><tr><th className="p-2">大名</th><th className="p-2">名声</th><th className="p-2">国数</th><th className="p-2">金</th><th className="p-2">兵糧</th><th className="p-2">役職・官位</th><th className="p-2">関係</th><th className="p-2">地図</th></tr></thead>
+            <thead className="text-xs text-stone-400 uppercase bg-stone-700 sticky top-0">
+                <tr>
+                    <th className="p-2">大名</th>
+                    <th className="p-2 cursor-pointer hover:text-white" onClick={() => requestSort('fame')}>名声<SortIcon column="fame"/></th>
+                    <th className="p-2 cursor-pointer hover:text-white" onClick={() => requestSort('count')}>国数<SortIcon column="count"/></th>
+                    <th className="p-2 cursor-pointer hover:text-white" onClick={() => requestSort('troops')}>総兵力<SortIcon column="troops"/></th>
+                    <th className="p-2 cursor-pointer hover:text-white" onClick={() => requestSort('gold')}>金<SortIcon column="gold"/></th>
+                    <th className="p-2 cursor-pointer hover:text-white" onClick={() => requestSort('rice')}>兵糧<SortIcon column="rice"/></th>
+                    <th className="p-2">役職・官位</th>
+                    <th className="p-2">関係</th>
+                    <th className="p-2">地図</th>
+                </tr>
+            </thead>
             <tbody>
               {activeDaimyos.map((d) => (
                 <tr key={d.id} className="border-b border-stone-700 hover:bg-stone-700/50">
                   <td className="p-2 flex items-center gap-2"><span className={`w-3 h-3 rounded-full ${d.color}`}></span>{d.name}</td>
-                  <td className="p-2 font-mono text-purple-300">{d.stats.fame}</td><td className="p-2 font-mono">{d.count}</td><td className="p-2 font-mono text-yellow-300">{d.stats.gold}</td><td className="p-2 font-mono text-green-300">{d.stats.rice}</td>
+                  <td className="p-2 font-mono text-purple-300">{d.stats.fame}</td>
+                  <td className="p-2 font-mono">{d.count}</td>
+                  <td className="p-2 font-mono text-blue-300">{d.totalTroops}</td>
+                  <td className="p-2 font-mono text-yellow-300">{d.stats.gold}</td>
+                  <td className="p-2 font-mono text-green-300">{d.stats.rice}</td>
                   <td className="p-2 text-xs">
                      {(d.stats.titles || []).map(t=><div key={t} className="bg-yellow-900/50 text-yellow-200 px-1 rounded border border-yellow-700 inline-block mr-1">{t}</div>)}
                      {d.stats.rank && <div className="bg-purple-900/50 text-purple-200 px-1 rounded border border-purple-700 inline-block">{d.stats.rank}</div>}
