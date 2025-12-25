@@ -13,7 +13,6 @@ import {
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
-// 分割したコンポーネントをインポート
 import { StartScreen, ResourceBar, ControlPanel, SpectatorControls } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 import { 
@@ -22,10 +21,84 @@ import {
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal 
 } from './components/Modals';
 
+// --- 援軍・報酬モーダル ---
+const ReinforcementRequestModal = ({ attacker, defender, potentialAllies, relations, onConfirm }) => {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-stone-800 border-2 border-red-600 p-6 rounded-lg max-w-lg w-full text-stone-100 shadow-2xl animate-fade-in">
+                <h2 className="text-2xl font-bold mb-4 text-red-500">敵襲警報！</h2>
+                <div className="mb-4">
+                    <p className="text-lg">
+                        <span className={`font-bold ${DAIMYO_INFO[attacker.ownerId]?.color || 'bg-gray-500'} px-2 py-0.5 rounded`}>
+                            {DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId}
+                        </span>軍が
+                    </p>
+                    <p className="text-lg">我が領土 <span className="font-bold text-yellow-400">{defender.name}</span> へ侵攻を開始しました！</p>
+                    <p className="mt-2 text-sm text-stone-400">敵兵力: 約{attacker.troops} / 自軍守備兵: {defender.troops}</p>
+                </div>
+
+                <h3 className="font-bold mb-2 border-b border-stone-600 pb-1">援軍を要請できる近隣勢力</h3>
+                <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+                    {potentialAllies.length === 0 ? (
+                        <p className="text-gray-500 text-sm">要請可能な勢力がありません...</p>
+                    ) : (
+                        potentialAllies.map(ally => {
+                            const rel = relations[defender.ownerId]?.[ally.id] || 50;
+                            const successRate = rel >= 80 ? '高' : rel >= 40 ? '中' : '低';
+                            return (
+                                <button key={ally.id} 
+                                    onClick={() => onConfirm(ally.id)}
+                                    className="w-full flex justify-between items-center p-3 bg-stone-700 hover:bg-stone-600 rounded border border-stone-500 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-3 h-3 rounded-full ${DAIMYO_INFO[ally.id]?.color || 'bg-gray-500'}`}></div>
+                                        <span>{DAIMYO_INFO[ally.id]?.name}</span>
+                                        <span className="text-xs text-stone-400">(関係: {rel})</span>
+                                    </div>
+                                    <div className="text-xs text-yellow-400">
+                                        成功率: {successRate}
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-3">
+                    <button onClick={() => onConfirm(null)} className="px-4 py-2 bg-stone-600 hover:bg-stone-500 rounded font-bold">
+                        援軍なしで迎撃
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const RewardPaymentModal = ({ allyId, amount, onPay, onRefuse }) => {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-stone-800 border-2 border-yellow-500 p-6 rounded-lg max-w-md text-stone-100 shadow-2xl">
+                <h2 className="text-xl font-bold mb-3 text-yellow-400">論功行賞</h2>
+                <p className="mb-4">
+                    {DAIMYO_INFO[allyId]?.name}家の援軍により、防衛に成功しました。<br/>
+                    約束の報酬（金{amount}）を支払いますか？
+                </p>
+                <div className="flex justify-end gap-3">
+                    <button onClick={onRefuse} className="px-4 py-2 bg-red-800 hover:bg-red-700 rounded text-xs font-bold border border-red-600">
+                        支払わない (関係悪化)
+                    </button>
+                    <button onClick={onPay} className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded font-bold text-black border border-yellow-400">
+                        支払う (金{amount})
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- Main App Component ---
 
 const App = () => {
-  // 1. State Definitions
   const [provinces, setProvinces] = useState(INITIAL_PROVINCES);
   const [daimyoStats, setDaimyoStats] = useState(INITIAL_RESOURCES);
   const [alliances, setAlliances] = useState(INITIAL_ALLIANCES);
@@ -38,12 +111,9 @@ const App = () => {
   const [turn, setTurn] = useState(1);
   const [gameState, setGameState] = useState('playing'); 
 
-  // AIの思考速度（待機時間ms）
   const [aiSpeed, setAiSpeed] = useState(300);
-  // 一時停止状態
   const [isPaused, setIsPaused] = useState(false);
 
-  // UI State
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
   const [attackSourceId, setAttackSourceId] = useState(null);
   const [transportSourceId, setTransportSourceId] = useState(null);
@@ -52,33 +122,38 @@ const App = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
 
-  // 編集モード用のState
   const [isEditMode, setIsEditMode] = useState(false);
   const [draggingProvinceId, setDraggingProvinceId] = useState(null);
 
-  // Modal State
   const [modalState, setModalState] = useState({ type: null, data: null }); 
   const [logs, setLogs] = useState([]);
   const [lastLog, setLastLog] = useState('大名を選択して天下統一を目指せ。');
 
-  // Turn Logic State
   const [turnOrder, setTurnOrder] = useState([]);
   const [currentTurnIndex, setCurrentTurnIndex] = useState(-1);
   const [isPlayerTurn, setIsPlayerTurn] = useState(false);
   const provincesRef = useRef(provinces);
 
-  // 2. Effects
+  const [pendingBattles, setPendingBattles] = useState([]); 
+  const [isResolvingBattles, setIsResolvingBattles] = useState(false);
+
   useEffect(() => { provincesRef.current = provinces; }, [provinces]);
 
+  // ▼▼▼ ゲーム終了判定 ▼▼▼
   useEffect(() => {
-    if (!playerDaimyoId) return;
-    // 観戦モードなら勝敗判定を行わない
-    if (playerDaimyoId === 'SPECTATOR') return;
+    if (!playerDaimyoId || playerDaimyoId === 'SPECTATOR') return;
 
+    const playerStats = daimyoStats[playerDaimyoId];
+    
     const playerCount = provinces.filter(p => p.ownerId === playerDaimyoId).length;
-    if (playerCount === provinces.length) setGameState('won');
-    else if (playerCount === 0) setGameState('lost');
-  }, [provinces, playerDaimyoId]);
+    if (playerCount === provinces.length) {
+        setGameState('won');
+    }
+    // isAlive が「明確に false」の場合のみ敗北
+    else if (playerStats && playerStats.isAlive === false) {
+        setGameState('lost');
+    }
+  }, [daimyoStats, provinces, playerDaimyoId]);
 
   useEffect(() => { if (playerDaimyoId && turnOrder.length === 0) startNewSeason(); }, [playerDaimyoId]);
   
@@ -95,26 +170,35 @@ const App = () => {
       }
   }, [turn]);
 
+  // ▼▼▼ ターン進行ロジック ▼▼▼
   useEffect(() => {
-      if (turnOrder.length === 0 || currentTurnIndex === -1) return;
+      if (turnOrder.length === 0 || currentTurnIndex === -1 || isResolvingBattles) return;
+      
+      if (pendingBattles.length > 0) {
+          setIsResolvingBattles(true);
+          processNextPendingBattle();
+          return;
+      }
+
       if (currentTurnIndex >= turnOrder.length) { setTurn(t => t + 1); return; }
+      
       const currentDaimyo = turnOrder[currentTurnIndex];
-      // 既に滅亡している大名はスキップ
-      if (!provinces.some(p => p.ownerId === currentDaimyo)) { advanceTurn(); return; }
+      if (daimyoStats[currentDaimyo] && daimyoStats[currentDaimyo].isAlive === false) { 
+          advanceTurn(); 
+          return; 
+      }
       
       if (currentDaimyo === playerDaimyoId) {
           setIsPlayerTurn(true); showLog(`我が軍の手番です。`);
       } else {
           setIsPlayerTurn(false);
-          // 一時停止中でなければAIターンを実行
+          // AIターン処理。一時停止中は呼ばない
           if (!isPaused) {
               setTimeout(() => processAiTurn(currentDaimyo), aiSpeed);
           }
       }
-  }, [currentTurnIndex, turnOrder, isPaused]); 
+  }, [currentTurnIndex, turnOrder, isPaused, pendingBattles.length, isResolvingBattles]); 
 
-  // 3. Helper Logic
-  // 【修正】ログが無限に増えないように制限（最大100件）
   const showLog = (text) => { 
       setLastLog(text); 
       setLogs(prev => {
@@ -126,7 +210,7 @@ const App = () => {
   
   const updateResource = (id, g, r, f=0, d=0) => {
       setDaimyoStats(prev => {
-          if (!prev[id]) return prev; // 念のため存在確認
+          if (!prev[id]) return prev; 
           return {
               ...prev, 
               [id]: { 
@@ -143,9 +227,25 @@ const App = () => {
   
   const getPlayerActionSource = () => provinces.find(p => p.ownerId === playerDaimyoId && p.actionsLeft > 0);
 
-  // 一時停止切替
-  const handlePauseToggle = () => {
-      setIsPaused(prev => !prev);
+  const handlePauseToggle = () => setIsPaused(prev => !prev);
+
+  // ▼▼▼ 滅亡チェック処理 ▼▼▼
+  const checkElimination = () => {
+      setDaimyoStats(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(id => {
+              if (id === 'Minor') return;
+              
+              const hasLand = provincesRef.current.some(p => p.ownerId === id);
+              
+              if (id === 'Tokugawa' && turn <= 3) return;
+
+              if (!hasLand) {
+                  next[id] = { ...next[id], isAlive: false };
+              }
+          });
+          return next;
+      });
   };
 
   const handleEventDecision = (event, choice) => {
@@ -174,14 +274,28 @@ const App = () => {
       }
 
       if (nextEvent) {
-          setModalState({ type: 'historical_event', data: nextEvent });
+          setTimeout(() => {
+              setModalState({ type: 'historical_event', data: nextEvent });
+          }, 300);
       } else {
+          // ▼▼▼ イベント終了後の処理 ▼▼▼
           setModalState({ type: null });
-          startNewSeason();
+          
+          // 松平独立イベント後は必ず一時停止させる
+          if (event.id === 'matsudaira_independence') {
+              setIsPaused(true);
+              showLog("イベントにより情勢が変化したため、一時停止しました。");
+          }
+
+          setTimeout(() => {
+              startNewSeason();
+          }, 500); 
       }
   };
 
   const startNewSeason = () => {
+      checkElimination();
+
       const isAutumn = (turn - 1) % 4 === 2;
       setCeasefires(prev => {
           const next = { ...prev };
@@ -194,9 +308,10 @@ const App = () => {
       }
       setProvinces(curr => curr.map(p => ({...p, actionsLeft: 3})));
       Object.keys(DAIMYO_INFO).forEach(id => {
+          if (daimyoStats[id] && daimyoStats[id].isAlive === false) return;
+
           const owned = provincesRef.current.filter(p => p.ownerId === id);
           if (owned.length) {
-              // 収入倍率: 商業1.2倍, 農業2.0倍
               const commerceIncome = Math.floor(owned.reduce((s,p)=>s+p.commerce,0) * 1.2); 
               const agIncome = isAutumn ? Math.floor(owned.reduce((s,p)=>s+p.agriculture,0) * 2.0) : 0; 
               updateResource(id, commerceIncome, agIncome);
@@ -206,17 +321,20 @@ const App = () => {
   };
 
   const determineTurnOrder = () => {
-      const active = Object.keys(DAIMYO_INFO).filter(id => id !== 'Minor' && provincesRef.current.some(p => p.ownerId === id));
+      const active = Object.keys(DAIMYO_INFO).filter(id => {
+          if (id === 'Minor') return false;
+          return daimyoStats[id]?.isAlive !== false;
+      });
       active.sort((a,b) => (daimyoStats[b]?.fame||0) - (daimyoStats[a]?.fame||0));
       setTurnOrder(active); setCurrentTurnIndex(0);
   };
 
   const advanceTurn = () => { setSelectedProvinceId(null); setAttackSourceId(null); setTransportSourceId(null); setCurrentTurnIndex(prev => prev + 1); };
 
-  // AI Logic
   const processAiTurn = (aiId) => {
-      // 停止中なら何もしない
       if (isPaused) return;
+
+      let attacksToPlayer = []; 
 
       setProvinces(curr => {
           const next = curr.map(p => ({...p}));
@@ -225,12 +343,9 @@ const App = () => {
           const originalRice = rice;
           const originalFame = fame;
           
-          // 【安全対策】DAIMYO_INFO[aiId]が存在しない場合はデフォルトを使用
           const daimyoInfo = DAIMYO_INFO[aiId] || { strategy: 'balanced', targetProvince: null, homeProvinceId: null, name: aiId };
           const strategy = daimyoInfo.strategy || 'balanced';
           const targetProvinceId = daimyoInfo.targetProvince; 
-          
-          // 発祥地IDの取得
           const homeProvinceId = daimyoInfo.homeProvinceId;
           
           const params = {
@@ -241,7 +356,6 @@ const App = () => {
           };
           const prm = params[strategy] || params.balanced;
 
-          // 市場操作
           const marketPrice = getRiceMarketPrice(turn);
           if (gold > prm.goldReserve * 1.5 && rice < prm.riceReserve) {
               const buyAmount = 200;
@@ -255,21 +369,19 @@ const App = () => {
           }
 
           const myProvinces = next.filter(p => p.ownerId === aiId);
+          if (myProvinces.length === 0) return next;
+
           const hasTarget = targetProvinceId && myProvinces.some(p => p.id === targetProvinceId);
           const targetProvData = targetProvinceId ? next.find(p => p.id === targetProvinceId) : null;
           
-          // 発祥地が他国に奪われているか？
           const homeProvData = homeProvinceId ? next.find(p => p.id === homeProvinceId) : null;
           const isHomeLost = homeProvData && homeProvData.ownerId !== aiId;
 
           myProvinces.forEach(p => {
               while (p.actionsLeft > 0) {
-                  // 現在地が発祥地か？
                   const isMyHome = homeProvinceId && p.id === homeProvinceId;
-                  
-                  // 発祥地なら防衛基準を引き上げる
                   const localRecruitThreshold = isMyHome ? prm.recruitThreshold * 1.5 : prm.recruitThreshold;
-                  const localDefenseThreshold = isMyHome ? 80 : 60; // 発祥地は防御80まで強化
+                  const localDefenseThreshold = isMyHome ? 80 : 60; 
 
                   const neighbors = p.neighbors.map(nid => next.find(x => x.id === nid)).filter(n => n);
                   const enemies = neighbors.filter(n => n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
@@ -278,30 +390,23 @@ const App = () => {
                   const currentLoyalty = p.loyalty || 50;
                   const currentTraining = p.training || 50;
 
-                  // 1. 輸送 (Transport)
                   if (!isFrontline && p.troops > 300 && gold >= COSTS.move.gold && rice >= COSTS.move.rice) {
                       const allyNeighbors = neighbors.filter(n => n.ownerId === aiId);
                       let dest = null;
-
                       if (allyNeighbors.length > 0) {
                           const frontlineAlly = allyNeighbors.find(an => {
                               const anNeighbors = an.neighbors.map(nid => next.find(x => x.id === nid));
                               return anNeighbors.some(ann => ann.ownerId !== aiId && !alliances[aiId]?.includes(ann.ownerId));
                           });
-                          
-                          if (frontlineAlly) {
-                              dest = frontlineAlly;
-                          } else if (targetProvData) {
+                          if (frontlineAlly) dest = frontlineAlly;
+                          else if (targetProvData) {
                               dest = allyNeighbors.sort((a,b) => {
                                   const dA = Math.sqrt((a.cx - targetProvData.cx)**2 + (a.cy - targetProvData.cy)**2);
                                   const dB = Math.sqrt((b.cx - targetProvData.cx)**2 + (b.cy - targetProvData.cy)**2);
                                   return dA - dB;
                               })[0];
-                          } else {
-                              dest = allyNeighbors[Math.floor(Math.random() * allyNeighbors.length)];
-                          }
+                          } else dest = allyNeighbors[Math.floor(Math.random() * allyNeighbors.length)];
                       }
-
                       if (dest) {
                           const amount = p.troops - 100; 
                           p.troops -= amount;
@@ -313,72 +418,44 @@ const App = () => {
                       }
                   }
 
-                  // 2. 施し (Pacify)
                   if (currentLoyalty < 50 && gold >= COSTS.pacify.gold && rice >= COSTS.pacify.rice) {
-                      gold -= COSTS.pacify.gold;
-                      rice -= COSTS.pacify.rice;
+                      gold -= COSTS.pacify.gold; rice -= COSTS.pacify.rice;
                       p.loyalty = Math.min(100, currentLoyalty + COSTS.pacify.boost);
-                      p.actionsLeft--;
-                      continue;
+                      p.actionsLeft--; continue;
                   }
-
-                  // 3. 普請 (Fortify) - 発祥地なら優先
                   if (isFrontline && p.defense < localDefenseThreshold && gold >= COSTS.fortify.gold) {
-                      gold -= COSTS.fortify.gold;
-                      p.defense += COSTS.fortify.boost;
-                      p.actionsLeft--;
-                      continue;
+                      gold -= COSTS.fortify.gold; p.defense += COSTS.fortify.boost;
+                      p.actionsLeft--; continue;
                   }
-
-                  // 4. 訓練 (Train)
                   if (currentTraining < 70 && gold >= COSTS.train.gold * 2) { 
-                      gold -= COSTS.train.gold;
-                      p.training = Math.min(100, currentTraining + COSTS.train.boost);
-                      p.actionsLeft--;
-                      continue;
+                      gold -= COSTS.train.gold; p.training = Math.min(100, currentTraining + COSTS.train.boost);
+                      p.actionsLeft--; continue;
                   }
 
-                  // 5. 攻撃 (Attack)
                   const attackTroops = Math.floor(p.troops * prm.sendRatio);
                   let target = null;
                   let canAttack = true;
 
                   if (attackTroops > 100 && rice >= COSTS.attack.rice + prm.riceReserve) {
-                      
-                      // 最優先：奪われた発祥地への攻撃（奪還）
                       if (isHomeLost) {
                           const homeTarget = enemies.find(e => e.id === homeProvinceId);
-                          if (homeTarget) {
-                              // 発祥地奪還なら、多少不利(1.2倍未満)でも攻める
-                              if (homeTarget.troops < attackTroops * 1.2) {
-                                  target = homeTarget;
-                              }
-                          }
+                          if (homeTarget && homeTarget.troops < attackTroops * 1.2) target = homeTarget;
                       }
-
-                      // 通常のターゲット選定
                       if (!target) {
                           if (targetProvinceId && !hasTarget && targetProvData) {
                               const directTarget = enemies.find(e => e.id === targetProvinceId);
-                              if (directTarget && directTarget.troops < attackTroops * prm.winThreshold) {
-                                  target = directTarget;
-                              } else {
+                              if (directTarget && directTarget.troops < attackTroops * prm.winThreshold) target = directTarget;
+                              else {
                                   let bestDist = Infinity;
                                   enemies.forEach(e => {
                                       const dist = Math.sqrt(Math.pow(e.cx - targetProvData.cx, 2) + Math.pow(e.cy - targetProvData.cy, 2));
-                                      if (dist < bestDist && e.troops < attackTroops * prm.winThreshold) {
-                                          bestDist = dist;
-                                          target = e;
-                                      }
+                                      if (dist < bestDist && e.troops < attackTroops * prm.winThreshold) { bestDist = dist; target = e; }
                                   });
                               }
                           }
-                          
                           if (!target) {
                               const potentialTargets = enemies.filter(e => e.troops < attackTroops * prm.winThreshold);
-                              if (potentialTargets.length > 0) {
-                                   target = potentialTargets.sort((a,b) => a.troops - b.troops)[0];
-                              }
+                              if (potentialTargets.length > 0) target = potentialTargets.sort((a,b) => a.troops - b.troops)[0];
                           }
                       }
                   }
@@ -388,8 +465,7 @@ const App = () => {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
                       p.troops += COSTS.recruit.troops;
                       p.loyalty = Math.max(0, (p.loyalty||50) - 5); 
-                      p.actionsLeft--;
-                      continue;
+                      p.actionsLeft--; continue;
                   }
 
                   if (aiId === 'Ainu' && target) {
@@ -397,71 +473,51 @@ const App = () => {
                       if (rel > 20) canAttack = false;
                   }
 
-                  // 奪還戦なら攻撃確率100%
                   const isReconquest = target && target.id === homeProvinceId;
                   const finalAttackChance = isReconquest ? 1.0 : prm.attackChance;
 
                   if (target && canAttack && Math.random() < finalAttackChance) {
                       rice -= COSTS.attack.rice;
                       p.actionsLeft--;
-                      let atk = attackTroops; 
-                      p.troops -= atk; 
-                      let def = target.troops;
                       
-                      for(let r=0; r<10; r++) {
-                          if(atk<=0 || def<=0) break;
-                          atk -= Math.floor(def * 0.1); def -= Math.floor(atk * 0.15); 
-                      }
-                      
-                      if (def <= 0) {
-                          const oldOwner = target.ownerId;
-                          target.ownerId = aiId;
-                          target.troops = Math.max(1, atk);
-                          target.actionsLeft = 0;
-                          // 安全対策
-                          const daimyoName = DAIMYO_INFO[aiId]?.name || aiId;
-                          showLog(`${daimyoName}が${target.name}を制圧！`);
-                          
-                          fame += 5; 
-                          setTimeout(() => updateResource(oldOwner, 0, 0, -5), 0);
-
-                          p.actionsLeft = 0; 
-                          continue; 
+                      if (target.ownerId === playerDaimyoId) {
+                          attacksToPlayer.push({
+                              attacker: { ...p }, defender: { ...target },
+                              attackerAmount: attackTroops, attackerId: aiId, defenderId: target.ownerId
+                          });
+                          p.troops -= attackTroops;
                       } else {
-                          target.troops = def;
-                          p.troops += Math.floor(atk * 0.5);
-                          
-                          if (atk <= 0) {
-                              fame -= 5;
-                              setTimeout(() => updateResource(target.ownerId, 0, 0, 5), 0);
+                          let atk = attackTroops; p.troops -= atk; let def = target.troops;
+                          for(let r=0; r<10; r++) { if(atk<=0 || def<=0) break; atk -= Math.floor(def * 0.1); def -= Math.floor(atk * 0.15); }
+                          if (def <= 0) {
+                              const oldOwner = target.ownerId;
+                              target.ownerId = aiId; target.troops = Math.max(1, atk); target.actionsLeft = 0;
+                              const daimyoName = DAIMYO_INFO[aiId]?.name || aiId;
+                              showLog(`${daimyoName}が${target.name}を制圧！`);
+                              fame += 5; 
+                              setTimeout(() => updateResource(oldOwner, 0, 0, -5), 0);
+                              p.actionsLeft = 0; continue; 
                           } else {
-                              fame -= 5;
-                              setTimeout(() => updateResource(target.ownerId, 0, 0, 5), 0);
+                              target.troops = def; p.troops += Math.floor(atk * 0.5);
+                              if (atk <= 0) { fame -= 5; setTimeout(() => updateResource(target.ownerId, 0, 0, 5), 0); } 
+                              else { fame -= 5; setTimeout(() => updateResource(target.ownerId, 0, 0, 5), 0); }
                           }
                       }
+                      continue;
                   }
                   
-                  // 通常徴兵 (発祥地は基準が高い)
-                  else if (isFrontline && p.troops < localRecruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
+                  if (isFrontline && p.troops < localRecruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
                       p.troops += COSTS.recruit.troops;
                       p.loyalty = Math.max(0, (p.loyalty||50) - 5);
                       p.actionsLeft--;
-                  }
-                  
-                  // 内政
-                  else if (gold >= COSTS.develop.gold + prm.goldReserve) {
-                      if (Math.random() > 0.5) {
-                          gold -= COSTS.develop.gold; p.commerce += COSTS.develop.boost;
-                      } else if (gold >= COSTS.cultivate.gold && rice >= COSTS.cultivate.rice + prm.riceReserve) {
-                          gold -= COSTS.cultivate.gold; rice -= COSTS.cultivate.rice; p.agriculture += COSTS.cultivate.boost;
-                      }
+                  } else if (gold >= COSTS.develop.gold + prm.goldReserve) {
+                      if (Math.random() > 0.5) { gold -= COSTS.develop.gold; p.commerce += COSTS.develop.boost; } 
+                      else if (gold >= COSTS.cultivate.gold && rice >= COSTS.cultivate.rice + prm.riceReserve) { gold -= COSTS.cultivate.gold; rice -= COSTS.cultivate.rice; p.agriculture += COSTS.cultivate.boost; }
                       p.actionsLeft--;
-                  }
-                  else if (gold > 5000) { 
+                  } else if (gold > 5000) { 
                       const donateAmount = 500; gold -= donateAmount; fame += Math.floor(donateAmount / 100); p.actionsLeft--;
-                  }
-                  else {
+                  } else {
                       p.actionsLeft = 0;
                   }
               }
@@ -470,137 +526,125 @@ const App = () => {
           setTimeout(() => updateResource(aiId, gold - originalGold, rice - originalRice, fame - originalFame), 0);
           return next;
       });
+      
+      if (attacksToPlayer.length > 0) {
+          setPendingBattles(prev => [...prev, ...attacksToPlayer]);
+      }
+
       if (!isPaused) setTimeout(advanceTurn, aiSpeed);
   };
 
-  const handleWheel = (e) => {
-    const scaleAmount = -e.deltaY * 0.001;
-    const newScale = Math.min(Math.max(0.2, mapTransform.scale + scaleAmount), 3);
-    const ratio = newScale / mapTransform.scale;
-    const newX = e.clientX - (e.clientX - mapTransform.x) * ratio;
-    const newY = e.clientY - (e.clientY - mapTransform.y) * ratio;
-    setMapTransform({ x: newX, y: newY, scale: newScale });
-  };
-
-  const handleProvinceDragStart = (pid, e) => {
-      setDraggingProvinceId(pid);
-  };
-
-  const handleGlobalMouseMove = (e) => {
-      if (draggingProvinceId && isEditMode) {
-          const deltaX = e.movementX / mapTransform.scale;
-          const deltaY = e.movementY / mapTransform.scale;
-
-          setProvinces(prev => prev.map(p => {
-              if (p.id === draggingProvinceId) {
-                  return { ...p, cx: p.cx + deltaX, cy: p.cy + deltaY };
-              }
-              return p;
-          }));
-      } else if (e.buttons === 1) {
-          if (Math.abs(e.clientX - dragStartPos.x) > 5 || Math.abs(e.clientY - dragStartPos.y) > 5) {
-              setIsDragging(true);
-              setMapTransform(p => ({ ...p, x: p.x + e.movementX, y: p.y + e.movementY }));
-          }
+  const processNextPendingBattle = () => {
+      if (pendingBattles.length === 0) {
+          setIsResolvingBattles(false);
+          advanceTurn(); 
+          return;
       }
+      const battle = pendingBattles[0]; 
+      const defenderProv = provinces.find(p => p.id === battle.defender.id);
+      const neighbors = defenderProv.neighbors.map(nid => provinces.find(p => p.id === nid));
+      const potentialAllies = neighbors
+          .filter(n => n.ownerId !== playerDaimyoId && n.ownerId !== battle.attackerId) 
+          .map(n => ({ id: n.ownerId, name: DAIMYO_INFO[n.ownerId].name }))
+          .filter((v,i,a) => a.findIndex(t=>(t.id === v.id)) === i); 
+
+      setModalState({ type: 'reinforcement_request', data: { battle, potentialAllies } });
   };
 
-  const handleGlobalMouseUp = () => {
-      setDraggingProvinceId(null);
-      setIsDragging(false);
-  };
+  const handleReinforcementDecision = (allyId) => {
+      const { battle } = modalState.data;
+      let allyTroops = 0;
+      let allyName = null;
+      let isSuccess = false;
 
-  const exportData = () => {
-      const dataStr = `export const SEA_ROUTES = [\n` +
-          `    ['usukeshi', 'tsugaru'],\n` +
-          `    ['usukeshi', 'sannohe'],\n` +
-          `    ['matsumae', 'tsugaru'],\n` +
-          `    ['sado', 'kasugayama'],\n` +
-          `    ['oki', 'gassan-toda'],\n` +
-          `    ['sumoto', 'hyogo'],\n` +
-          `    ['sumoto', 'tokushima'],\n` +
-          `    ['imabari', 'fukuyama'],\n` +
-          `    ['imabari', 'itsukushima'],\n` +
-          `    ['imabari', 'funai'],\n` +
-          `    ['shimonoseki', 'kokura'],\n` +
-          `    ['shimonoseki', 'hakata'],\n` +
-          `    ['tsushima', 'iki'],\n` +
-          `    ['iki', 'matsuura'],\n` +
-          `    ['tanegashima', 'kagoshima'],\n` +
-          `    ['tanegashima', 'amami'],\n` +
-          `    ['amami', 'shuri']\n` +
-          `];\n\n` +
-          `export const PROVINCE_DATA_BASE = [\n` + 
-          provinces.map(p => {
-              const originalCx = Math.round(p.cx / 2);
-              const originalCy = Math.round(p.cy / 2);
-              const neighborsStr = JSON.stringify(p.neighbors).replace(/"/g, "'");
-              
-              return `  { id: '${p.id}', name: '${p.name}', ownerId: '${p.ownerId}', troops: ${p.troops}, cx: ${originalCx}, cy: ${originalCy}, neighbors: ${neighborsStr}, commerce: ${p.commerce}, agriculture: ${p.agriculture}, defense: ${p.defense} },`;
-          }).join('\n') + 
-          `\n];`;
-      
-      const blob = new Blob([dataStr], { type: 'text/javascript' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'provinces.js';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-  };
-
-  const handleDomesticAction = (type, pid) => {
-      const p = provinces.find(x => x.id === pid);
-      const isImmediate = ['develop', 'cultivate', 'pacify', 'fortify'].includes(type);
-      
-      if (isImmediate) {
-          if (p.actionsLeft <= 0) return showLog("行動力不足");
-          const cost = COSTS[type];
-          const stats = daimyoStats[playerDaimyoId];
-          if (stats.gold < cost.gold || stats.rice < cost.rice) return showLog("資源不足");
-
-          updateResource(playerDaimyoId, -cost.gold, -cost.rice);
-          consumeAction(pid);
-
-          if (type === 'develop') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, commerce: pr.commerce + cost.boost} : pr)); showLog("商業開発完了"); }
-          if (type === 'cultivate') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, agriculture: pr.agriculture + cost.boost} : pr)); showLog("開墾完了"); }
-          if (type === 'pacify') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, loyalty: Math.min(100, (pr.loyalty||50) + cost.boost)} : pr)); showLog("施しを行いました"); }
-          if (type === 'fortify') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, defense: pr.defense + cost.boost} : pr)); showLog("普請完了"); }
-      } else {
-          if (type === 'market') setModalState({ type: 'market', data: { pid } });
-          if (type === 'trade') setModalState({ type: 'trade', data: { pid } });
-          if (type === 'donate') setModalState({ type: 'donate', data: { pid } });
-          if (type === 'titles') setModalState({ type: 'titles', data: { pid } });
-      }
-  };
-
-  const handleMilitaryAction = (type, pid) => {
-      const p = provinces.find(x => x.id === pid);
-      if (p.actionsLeft <= 0) return showLog("行動力不足");
-      
-      if (type === 'train') {
-          if (daimyoStats[playerDaimyoId].gold < COSTS.train.gold) return showLog("金不足");
-          updateResource(playerDaimyoId, -COSTS.train.gold, 0);
-          setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, training: Math.min(100, (pr.training||50) + COSTS.train.boost)} : pr));
-          consumeAction(pid); showLog("訓練完了");
-      }
-      if (type === 'recruit') {
-           const c = COSTS.recruit;
-           if (daimyoStats[playerDaimyoId].gold < c.gold || daimyoStats[playerDaimyoId].rice < c.rice) return showLog("資源不足");
-           updateResource(playerDaimyoId, -c.gold, -c.rice);
-           setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, troops: pr.troops + c.troops, loyalty: Math.max(0, (pr.loyalty||50) - 5)} : pr));
-           consumeAction(pid); showLog("徴兵完了");
-      }
-      if (type === 'attack') { 
-          if (playerDaimyoId === 'Ainu') {
-             setAttackSourceId(pid); setTransportSourceId(null); setSelectedProvinceId(null); showLog("攻撃目標を選択してください"); 
+      if (allyId) {
+          const rel = relations[playerDaimyoId]?.[allyId] || 50;
+          const successChance = rel / 100; 
+          if (Math.random() < successChance) {
+              isSuccess = true;
+              allyName = DAIMYO_INFO[allyId].name;
+              allyTroops = 500; 
+              showLog(`${allyName}が援軍要請に応じました！ (兵+${allyTroops})`);
+              updateRelation(allyId, 5); 
           } else {
-             setAttackSourceId(pid); setTransportSourceId(null); setSelectedProvinceId(null); showLog("攻撃目標を選択してください"); 
+              showLog(`${DAIMYO_INFO[allyId].name}に援軍を断られました...`);
+              updateRelation(allyId, -5);
           }
       }
-      if (type === 'transport') { setTransportSourceId(pid); setAttackSourceId(null); setSelectedProvinceId(null); showLog("輸送先を選択してください"); }
+
+      setModalState({ 
+          type: 'battle', 
+          data: { 
+              attacker: battle.attacker, 
+              defender: { ...battle.defender, troops: battle.defender.troops + allyTroops }, 
+              attackerAmount: battle.attackerAmount,
+              originalDefenderTroops: battle.defender.troops,
+              reinforcement: isSuccess ? { allyId, troops: allyTroops, cost: 500 } : null 
+          } 
+      });
+  };
+
+  const handleBattleFinish = (res) => {
+      const { attacker, defender, attackerAmount, reinforcement } = modalState.data;
+      const { attackerRemaining, defenderRemaining } = res;
+
+      setProvinces(prev => prev.map(p => {
+             if (p.id === defender.id) {
+                 if (defenderRemaining <= 0) return { ...p, ownerId: attacker.ownerId, troops: attackerRemaining, actionsLeft: 0, loyalty: 30, defense: Math.max(0, p.defense - 20) };
+                 else return { ...p, troops: Math.max(0, defenderRemaining - (reinforcement ? reinforcement.troops : 0)) };
+             }
+             return p;
+      }));
+      
+      if (defenderRemaining <= 0) {
+         const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
+         showLog(`${attackerName}軍が${defender.name}を制圧！`);
+         updateResource(attacker.ownerId, 0, 0, 5); 
+         
+         const defenderInfo = DAIMYO_INFO[defender.ownerId];
+         if (defenderInfo && defenderInfo.homeProvinceId === defender.id) {
+             updateResource(defender.ownerId, 0, 0, -10);
+             showLog(`${defenderInfo.name}家、本拠地陥落...名声失墜！`);
+         } else {
+             updateResource(defender.ownerId, 0, 0, -5); 
+         }
+      } else if (attackerRemaining <= 0) {
+         const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
+         showLog(`${attackerName}軍、${defender.name}攻略に失敗。`);
+         updateResource(attacker.ownerId, 0, 0, -5); 
+         updateResource(defender.ownerId, 0, 0, 5); 
+      } else {
+         const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
+         showLog(`${attackerName}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
+         updateResource(attacker.ownerId, 0, 0, -5); 
+         updateResource(defender.ownerId, 0, 0, 5); 
+      }
+
+      setPendingBattles(prev => prev.slice(1));
+
+      if (defenderRemaining > 0 && reinforcement && defender.ownerId === playerDaimyoId) {
+          setModalState({ type: 'reward_payment', data: { allyId: reinforcement.allyId, amount: reinforcement.cost } });
+      } else {
+          setModalState({ type: null }); 
+      }
+  };
+
+  const handleRewardPayment = (pay) => {
+      const { allyId, amount } = modalState.data;
+      if (pay) {
+          if (daimyoStats[playerDaimyoId].gold >= amount) {
+              updateResource(playerDaimyoId, -amount, 0);
+              updateRelation(allyId, 10); 
+              showLog(`${DAIMYO_INFO[allyId].name}に報酬を支払いました。関係が深まりました。`);
+          } else {
+              showLog(`資金不足で報酬を払えませんでした... ${DAIMYO_INFO[allyId].name}との関係が悪化しました。`);
+              updateRelation(allyId, -20);
+          }
+      } else {
+          showLog(`報酬を支払いませんでした。${DAIMYO_INFO[allyId].name}は激怒しています！`);
+          updateRelation(allyId, -50);
+      }
+      setModalState({ type: null });
   };
 
   const handleTroopAction = (amount) => {
@@ -620,7 +664,23 @@ const App = () => {
       } else if (type === 'attack') {
           updateResource(playerDaimyoId, -COSTS.attack.gold, -COSTS.attack.rice);
           setProvinces(prev => prev.map(p => p.id === sourceId ? {...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft-1)} : p));
-          setModalState({ type: 'battle', data: { attacker: src, defender: tgt, attackerAmount: amount } });
+          
+          let enemyReinforcement = 0;
+          const enemyId = tgt.ownerId;
+          const enemyNeighbors = tgt.neighbors.map(nid => provinces.find(p => p.id === nid));
+          const enemyAllies = enemyNeighbors.filter(n => alliances[enemyId]?.includes(n.ownerId) && n.ownerId !== enemyId);
+          
+          if (enemyAllies.length > 0 && Math.random() < 0.5) {
+               const ally = enemyAllies[0];
+               enemyReinforcement = 300; 
+               const allyName = DAIMYO_INFO[ally.ownerId].name;
+               showLog(`敵軍、${allyName}より援軍(${enemyReinforcement})到着！`);
+          }
+
+          setModalState({ 
+              type: 'battle', 
+              data: { attacker: src, defender: { ...tgt, troops: tgt.troops + enemyReinforcement }, attackerAmount: amount, isPlayerAttack: true } 
+          });
       }
       setAttackSourceId(null); setTransportSourceId(null);
   };
@@ -637,11 +697,9 @@ const App = () => {
               const rel = relations[playerDaimyoId]?.[targetProv.ownerId] ?? 50;
               if (rel > 20) {
                   showLog("関係が悪化していないため攻撃の大義名分がありません(必要関係値:20以下)");
-                  setAttackSourceId(null);
-                  return;
+                  setAttackSourceId(null); return;
               }
           }
-
           setModalState({ type: 'troop', data: { type, sourceId: srcId, targetId: pid, maxTroops: src.troops } });
       } else {
           if (!attackSourceId && !transportSourceId) setSelectedProvinceId(pid === selectedProvinceId ? null : pid);
@@ -664,6 +722,31 @@ const App = () => {
       }
   };
 
+  const handleWheel = (e) => {
+    const scaleAmount = -e.deltaY * 0.001;
+    const newScale = Math.min(Math.max(0.2, mapTransform.scale + scaleAmount), 3);
+    const ratio = newScale / mapTransform.scale;
+    const newX = e.clientX - (e.clientX - mapTransform.x) * ratio;
+    const newY = e.clientY - (e.clientY - mapTransform.y) * ratio;
+    setMapTransform({ x: newX, y: newY, scale: newScale });
+  };
+
+  const handleGlobalMouseMove = (e) => {
+      if (draggingProvinceId && isEditMode) {
+          const deltaX = e.movementX / mapTransform.scale;
+          const deltaY = e.movementY / mapTransform.scale;
+          setProvinces(prev => prev.map(p => {
+              if (p.id === draggingProvinceId) return { ...p, cx: p.cx + deltaX, cy: p.cy + deltaY };
+              return p;
+          }));
+      } else if (e.buttons === 1) {
+          if (Math.abs(e.clientX - dragStartPos.x) > 5 || Math.abs(e.clientY - dragStartPos.y) > 5) {
+              setIsDragging(true);
+              setMapTransform(p => ({ ...p, x: p.x + e.movementX, y: p.y + e.movementY }));
+          }
+      }
+  };
+
   if (!playerDaimyoId) return <StartScreen onSelectDaimyo={setPlayerDaimyoId} />;
 
   const currentDaimyoId = turnOrder[currentTurnIndex];
@@ -674,51 +757,30 @@ const App = () => {
         <ResourceBar stats={daimyoStats[playerDaimyoId]} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
 
         <div className="absolute top-20 left-4 z-50">
-            <SpectatorControls 
-                aiSpeed={aiSpeed} 
-                onSpeedChange={setAiSpeed} 
-                isPaused={isPaused} 
-                onPauseToggle={handlePauseToggle} 
-            />
+            <SpectatorControls aiSpeed={aiSpeed} onSpeedChange={setAiSpeed} isPaused={isPaused} onPauseToggle={handlePauseToggle} />
         </div>
 
         <div className="absolute top-20 right-4 z-50 flex gap-2">
-            <button 
-                onClick={() => setIsEditMode(!isEditMode)} 
-                className={`px-3 py-1 rounded text-xs font-bold border ${isEditMode ? 'bg-yellow-600 border-yellow-400 text-black' : 'bg-stone-800 border-stone-600 text-white'}`}
-            >
-                {isEditMode ? '編集終了' : 'マップ編集'}
-            </button>
-            {isEditMode && (
-                <button 
-                    onClick={exportData} 
-                    className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white"
-                >
-                    データ出力(保存)
-                </button>
-            )}
+            <button onClick={() => setIsEditMode(!isEditMode)} className={`px-3 py-1 rounded text-xs font-bold border ${isEditMode ? 'bg-yellow-600 border-yellow-400 text-black' : 'bg-stone-800 border-stone-600 text-white'}`}>{isEditMode ? '編集終了' : 'マップ編集'}</button>
+            {isEditMode && (<button onClick={exportData} className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white">データ出力(保存)</button>)}
         </div>
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={(e) => { setDragStartPos({x:e.clientX, y:e.clientY}); setIsDragging(false); }}
              onMouseMove={handleGlobalMouseMove} 
-             onMouseUp={handleGlobalMouseUp}     
+             onMouseUp={() => { setDraggingProvinceId(null); setIsDragging(false); }}     
              onWheel={handleWheel}>
             
             <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75">
-                
                 <div className="absolute top-0 left-0 w-[5600px] h-[8800px] z-0 pointer-events-none">
                     <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-50" />
                 </div>
-
                 <div className="relative z-10">
                     <GameMap 
                         provinces={provinces} viewingRelationId={viewingRelationId} playerDaimyoId={playerDaimyoId}
                         alliances={alliances} ceasefires={ceasefires} coalition={coalition}
                         selectedProvinceId={selectedProvinceId} attackSourceId={attackSourceId} transportSourceId={transportSourceId}
-                        onSelectProvince={handleMapSelect}
-                        isEditMode={isEditMode}
-                        onProvinceDragStart={handleProvinceDragStart}
+                        onSelectProvince={handleMapSelect} isEditMode={isEditMode} onProvinceDragStart={setDraggingProvinceId}
                     />
                 </div>
             </div>
@@ -745,164 +807,22 @@ const App = () => {
             isPlayerTurn={isPlayerTurn} hasSelection={attackSourceId || transportSourceId}
             onViewBack={() => setViewingRelationId(null)} viewingRelationId={viewingRelationId}
             onDaimyoList={() => setModalState({type: 'list'})}
-            currentDaimyoId={currentDaimyoId}
-            isPaused={isPaused}
+            currentDaimyoId={currentDaimyoId} isPaused={isPaused}
         />
         
-        {/* ... (Modals rendering) ... */}
-        {modalState.type === 'incoming_request' && <IncomingRequestModal request={modalState.data} 
-            onAccept={() => {
-                if (modalState.data.type === 'ainu_demand') {
-                    const cost = 1000;
-                    if (daimyoStats[playerDaimyoId].gold >= cost && daimyoStats[playerDaimyoId].rice >= cost) {
-                        updateResource(playerDaimyoId, -cost, -cost);
-                        updateRelation('Ainu', 10);
-                        showLog("アイヌの要求を受け入れました。");
-                    } else {
-                        showLog("要求された物資が足りません...関係が悪化しました。");
-                        updateRelation('Ainu', -30);
-                    }
-                }
-                if (modalState.data.type === 'ainu_trade') {
-                    if (daimyoStats[playerDaimyoId].gold >= 500) {
-                        updateResource(playerDaimyoId, -500, 500);
-                        updateRelation('Ainu', 10);
-                        showLog("交易成立：金500を支払い、兵糧500を得ました。");
-                    } else {
-                        showLog("資金が不足しています。");
-                    }
-                }
-                setModalState({type:null});
-            }}
-            onReject={() => {
-                if (modalState.data.type === 'ainu_demand') {
-                    showLog("アイヌの要求を拒否しました。関係が極端に悪化しました！");
-                    updateRelation('Ainu', -50);
-                }
-                if (modalState.data.type === 'ainu_trade') {
-                    showLog("交易の申し出を断りました。");
-                }
-                setModalState({type:null});
-            }}
-        />}
-
-        {modalState.type === 'historical_event' && (
-             <HistoricalEventModal 
-               event={modalState.data} 
-               daimyoId={playerDaimyoId} 
-               onSelect={(choice) => handleEventDecision(modalState.data, choice)} 
-             />
-        )}
-
+        {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
+        {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
+        {modalState.type === 'battle' && <BattleScene battleData={modalState.data} onFinish={handleBattleFinish} />}
+        {modalState.type === 'incoming_request' && <IncomingRequestModal request={modalState.data} onAccept={() => { setModalState({type:null}); }} onReject={() => { setModalState({type:null}); }} />}
+        {modalState.type === 'historical_event' && <HistoricalEventModal event={modalState.data} daimyoId={playerDaimyoId} onSelect={(choice) => handleEventDecision(modalState.data, choice)} />}
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
-        {modalState.type === 'battle' && <BattleScene battleData={modalState.data} onFinish={(res) => {
-             const { attacker, defender, attackerAmount } = modalState.data;
-             const { attackerRemaining, defenderRemaining } = res;
-             const atkLost = attackerAmount - attackerRemaining;
-             const atkRecovered = Math.floor(atkLost * 0.3);
-             const atkReturning = attackerRemaining + atkRecovered;
-             const defLost = defender.troops - defenderRemaining;
-             const defRecovered = Math.floor(defLost * 0.3);
-             const defFinal = defenderRemaining + defRecovered;
-
-             setProvinces(prev => prev.map(p => {
-                 if (p.id === defender.id) {
-                     if (defenderRemaining <= 0) return { ...p, ownerId: attacker.ownerId, troops: attackerRemaining, actionsLeft: 0, loyalty: 30, defense: Math.max(0, p.defense - 20) };
-                     else return { ...p, troops: defFinal };
-                 }
-                 if (p.id === attacker.id) {
-                     if (defenderRemaining <= 0) return { ...p, troops: p.troops + atkRecovered };
-                     else return { ...p, troops: p.troops + atkReturning };
-                 }
-                 return p;
-             }));
-             
-             if (defenderRemaining <= 0) {
-                 const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
-                 showLog(`${attackerName}軍が${defender.name}を制圧！`);
-                 updateResource(attacker.ownerId, 0, 0, 5); 
-                 
-                 // 【安全対策】発祥地を奪われた場合の名声ペナルティ
-                 const defenderInfo = DAIMYO_INFO[defender.ownerId];
-                 if (defenderInfo && defenderInfo.homeProvinceId === defender.id) {
-                     updateResource(defender.ownerId, 0, 0, -10);
-                     showLog(`${defenderInfo.name}家、本拠地陥落...名声失墜！`);
-                 } else {
-                     updateResource(defender.ownerId, 0, 0, -5); 
-                 }
-             }
-             else if (attackerRemaining <= 0) {
-                 const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
-                 showLog(`${attackerName}軍、${defender.name}攻略に失敗。`);
-                 updateResource(attacker.ownerId, 0, 0, -5); 
-                 updateResource(defender.ownerId, 0, 0, 5); 
-             }
-             else {
-                 const attackerName = DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId;
-                 showLog(`${attackerName}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
-                 updateResource(attacker.ownerId, 0, 0, -5); 
-                 updateResource(defender.ownerId, 0, 0, 5); 
-             }
-             setModalState({ type: null }); 
-        }} />}
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={handleTroopAction} onCancel={() => setModalState({type: null})} />}
-        
-        {modalState.type === 'negotiate' && <NegotiationScene targetDaimyoId={modalState.data.targetId} targetDaimyo={DAIMYO_INFO[modalState.data.targetId]} isAllied={alliances[playerDaimyoId]?.includes(modalState.data.targetId)} 
-            isPlayerAinu={playerDaimyoId === 'Ainu'}
-            onConfirm={(t) => {
-            const p = provinces.find(x => x.id === modalState.data.provinceId);
-            if (p.actionsLeft <= 0) { showLog("行動力不足"); return; }
-            consumeAction(modalState.data.provinceId); 
-            
-            if(t==='gift') { updateResource(playerDaimyoId, -COSTS.gift.gold, 0); updateRelation(modalState.data.targetId, 10); showLog("贈答を行いました"); }
-            if(t==='ceasefire') { updateResource(playerDaimyoId, -300, 0); setCeasefires(prev => ({...prev, [playerDaimyoId]: {...prev[playerDaimyoId], [modalState.data.targetId]: 5}})); showLog("停戦成立"); }
-            if(t==='threaten') { showLog("脅迫しました..."); updateRelation(modalState.data.targetId, -20); }
-            if(t==='ainu_demand') { 
-                showLog("理不尽な圧力をかけました。"); 
-                updateRelation(modalState.data.targetId, -30);
-                if (Math.random() > 0.4) {
-                    showLog("相手は要求を呑みました。(金・兵糧獲得)");
-                    updateResource(playerDaimyoId, 1000, 1000);
-                } else {
-                    showLog("相手は激怒し、要求を拒否しました。");
-                }
-            }
-            if(t==='surrender') { showLog("勧告しました..."); }
-            if(t==='request_aid') { showLog("援助を要請しました"); }
-            if(t==='break_alliance') { showLog("同盟を破棄しました"); setAlliances(prev => ({...prev, [playerDaimyoId]: prev[playerDaimyoId].filter(id => id !== modalState.data.targetId), [modalState.data.targetId]: prev[modalState.data.targetId].filter(id => id !== playerDaimyoId)})); }
-            setModalState({type:null});
-        }} onCancel={() => setModalState({type: null})} />}
-        {modalState.type === 'market' && <MarketModal currentGold={daimyoStats[playerDaimyoId].gold} currentRice={daimyoStats[playerDaimyoId].rice} price={getRiceMarketPrice(turn)} onClose={() => setModalState({type:null})} onTrade={(m, a, c) => {
-            updateResource(playerDaimyoId, m==='buy'?-c:c, m==='buy'?a:-a); setModalState({type:null}); showLog("取引完了");
-        }} />}
-        {modalState.type === 'titles' && <TitlesModal daimyoStats={daimyoStats} provinces={provinces} daimyoId={playerDaimyoId} onClose={() => setModalState({type:null})} onApply={(t) => {
-            const p = provinces.find(x => x.id === modalState.data.pid);
-            if (p.actionsLeft <= 0) { showLog("行動力不足"); return; }
-            consumeAction(modalState.data.pid); 
-            updateResource(playerDaimyoId, -COSTS.title_app.gold, 0, t.fameBonus);
-            setDaimyoStats(prev => ({...prev, [playerDaimyoId]: {...prev[playerDaimyoId], titles: [...prev[playerDaimyoId].titles, t.name]}}));
-            setModalState({type:null}); showLog("役職就任");
-        }} onApplyRank={(r) => {
-            const p = provinces.find(x => x.id === modalState.data.pid);
-            if (p.actionsLeft <= 0) { showLog("行動力不足"); return; }
-            consumeAction(modalState.data.pid); 
-            updateResource(playerDaimyoId, -COSTS.rank_app.gold, 0, r.fameBonus);
-            setDaimyoStats(prev => ({...prev, [playerDaimyoId]: {...prev[playerDaimyoId], rank: r.name}}));
-            setModalState({type:null}); showLog("官位叙任");
-        }} />}
-        {modalState.type === 'donate' && <DonateModal currentGold={daimyoStats[playerDaimyoId].gold} shogunName={DAIMYO_INFO[shogunId]?.name} isShogun={playerDaimyoId===shogunId} onCancel={() => setModalState({type:null})} onConfirm={(tgt, amt, fame) => {
-            const p = provinces.find(x => x.id === modalState.data.pid);
-            if (p.actionsLeft <= 0) { showLog("行動力不足"); return; }
-            consumeAction(modalState.data.pid); 
-            updateResource(playerDaimyoId, -amt, 0, fame); setModalState({type:null}); showLog("献金完了");
-        }} />}
-        {modalState.type === 'trade' && <TradeModal onCancel={() => setModalState({type:null})} onConfirm={(t) => {
-            const p = provinces.find(x => x.id === modalState.data.pid);
-            if (p.actionsLeft <= 0) { showLog("行動力不足"); return; }
-            consumeAction(modalState.data.pid); 
-            updateResource(playerDaimyoId, -COSTS.trade.gold, 0); setModalState({type:null}); showLog("貿易完了");
-        }} />}
+        {modalState.type === 'negotiate' && <NegotiationScene targetDaimyoId={modalState.data.targetId} targetDaimyo={DAIMYO_INFO[modalState.data.targetId]} isAllied={alliances[playerDaimyoId]?.includes(modalState.data.targetId)} isPlayerAinu={playerDaimyoId === 'Ainu'} onConfirm={(t) => { setModalState({type:null}); }} onCancel={() => setModalState({type: null})} />}
+        {modalState.type === 'market' && <MarketModal currentGold={daimyoStats[playerDaimyoId].gold} currentRice={daimyoStats[playerDaimyoId].rice} price={getRiceMarketPrice(turn)} onClose={() => setModalState({type:null})} onTrade={(m, a, c) => { updateResource(playerDaimyoId, m==='buy'?-c:c, m==='buy'?a:-a); setModalState({type:null}); showLog("取引完了"); }} />}
+        {modalState.type === 'titles' && <TitlesModal daimyoStats={daimyoStats} provinces={provinces} daimyoId={playerDaimyoId} onClose={() => setModalState({type:null})} onApply={(t) => { setModalState({type:null}); showLog("役職就任"); }} onApplyRank={(r) => { setModalState({type:null}); showLog("官位叙任"); }} />}
+        {modalState.type === 'donate' && <DonateModal currentGold={daimyoStats[playerDaimyoId].gold} shogunName={DAIMYO_INFO[shogunId]?.name} isShogun={playerDaimyoId===shogunId} onCancel={() => setModalState({type:null})} onConfirm={(tgt, amt, fame) => { setModalState({type:null}); showLog("献金完了"); }} />}
+        {modalState.type === 'trade' && <TradeModal onCancel={() => setModalState({type:null})} onConfirm={(t) => { setModalState({type:null}); showLog("貿易完了"); }} />}
 
         {gameState !== 'playing' && <GameOverScreen gameState={gameState} onRestart={() => window.location.reload()} />}
 
