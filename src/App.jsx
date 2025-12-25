@@ -14,7 +14,7 @@ import {
 import japanMapImg from './assets/japan_map.jpg'; 
 
 // 分割したコンポーネントをインポート
-import { StartScreen, ResourceBar, ControlPanel } from './components/UIComponents';
+import { StartScreen, ResourceBar, ControlPanel, SpectatorControls } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
@@ -37,6 +37,11 @@ const App = () => {
   const [playerDaimyoId, setPlayerDaimyoId] = useState(null); 
   const [turn, setTurn] = useState(1);
   const [gameState, setGameState] = useState('playing'); 
+
+  // AIの思考速度（待機時間ms）
+  const [aiSpeed, setAiSpeed] = useState(300);
+  // 一時停止状態
+  const [isPaused, setIsPaused] = useState(false);
 
   // UI State
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
@@ -67,6 +72,9 @@ const App = () => {
 
   useEffect(() => {
     if (!playerDaimyoId) return;
+    // 観戦モードなら勝敗判定を行わない
+    if (playerDaimyoId === 'SPECTATOR') return;
+
     const playerCount = provinces.filter(p => p.ownerId === playerDaimyoId).length;
     if (playerCount === provinces.length) setGameState('won');
     else if (playerCount === 0) setGameState('lost');
@@ -96,10 +104,13 @@ const App = () => {
       if (currentDaimyo === playerDaimyoId) {
           setIsPlayerTurn(true); showLog(`我が軍の手番です。`);
       } else {
-          // ▼ 変更: AIターンの開始待ち時間を短縮 (800ms -> 200ms)
-          setIsPlayerTurn(false); setTimeout(() => processAiTurn(currentDaimyo), 200);
+          setIsPlayerTurn(false);
+          // 一時停止中でなければAIターンを実行
+          if (!isPaused) {
+              setTimeout(() => processAiTurn(currentDaimyo), aiSpeed);
+          }
       }
-  }, [currentTurnIndex, turnOrder]);
+  }, [currentTurnIndex, turnOrder, isPaused]); 
 
   // 3. Helper Logic
   const showLog = (text) => { setLastLog(text); setLogs(prev => [...prev, `${getFormattedDate(turn)}: ${text}`]); };
@@ -111,6 +122,11 @@ const App = () => {
   const consumeAction = (pid) => setProvinces(prev => prev.map(p => p.id === pid ? { ...p, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
   
   const getPlayerActionSource = () => provinces.find(p => p.ownerId === playerDaimyoId && p.actionsLeft > 0);
+
+  // 一時停止切替
+  const handlePauseToggle = () => {
+      setIsPaused(prev => !prev);
+  };
 
   const handleEventDecision = (event, choice) => {
       setModalState({ type: null });
@@ -160,13 +176,13 @@ const App = () => {
       Object.keys(DAIMYO_INFO).forEach(id => {
           const owned = provincesRef.current.filter(p => p.ownerId === id);
           if (owned.length) {
-              const commerceIncome = owned.reduce((s,p)=>s+p.commerce,0);
-              const agIncome = isAutumn ? owned.reduce((s,p)=>s+p.agriculture,0)*2 : 0;
+              // 収入倍率: 商業1.2倍, 農業2.0倍
+              const commerceIncome = Math.floor(owned.reduce((s,p)=>s+p.commerce,0) * 1.2); 
+              const agIncome = isAutumn ? Math.floor(owned.reduce((s,p)=>s+p.agriculture,0) * 2.0) : 0; 
               updateResource(id, commerceIncome, agIncome);
           }
       });
-      // ▼ 変更: 季節開始時のターン順決定待ち時間を短縮 (500ms -> 200ms)
-      setTimeout(determineTurnOrder, 200);
+      if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
   };
 
   const determineTurnOrder = () => {
@@ -179,6 +195,9 @@ const App = () => {
 
   // AI Logic
   const processAiTurn = (aiId) => {
+      // 停止中なら何もしない
+      if (isPaused) return;
+
       setProvinces(curr => {
           const next = curr.map(p => ({...p}));
           let { gold, rice, fame } = daimyoStats[aiId] || { gold:0, rice:0, fame: 0 };
@@ -187,16 +206,17 @@ const App = () => {
           const originalFame = fame;
           
           const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
+          const targetProvinceId = DAIMYO_INFO[aiId]?.targetProvince; 
           
-          // ▼ 修正: AIが行動するためのリソース温存ラインを全体的に引き下げ
           const params = {
-              aggressive: { attackChance: 0.8, recruitThreshold: 400, safetyMargin: 0.4, goldReserve: 50, riceReserve: 50 },
-              balanced:   { attackChance: 0.5, recruitThreshold: 500, safetyMargin: 0.8, goldReserve: 200, riceReserve: 200 },
-              defensive:  { attackChance: 0.2, recruitThreshold: 700, safetyMargin: 1.2, goldReserve: 500, riceReserve: 500 },
-              ainu:       { attackChance: 0.0, recruitThreshold: 800, safetyMargin: 1.5, goldReserve: 1000, riceReserve: 1000 }
+              aggressive: { attackChance: 0.9, recruitThreshold: 400, goldReserve: 50, riceReserve: 50, sendRatio: 0.8, winThreshold: 1.1 },
+              balanced:   { attackChance: 0.6, recruitThreshold: 500, goldReserve: 200, riceReserve: 200, sendRatio: 0.6, winThreshold: 1.3 },
+              defensive:  { attackChance: 0.3, recruitThreshold: 700, goldReserve: 500, riceReserve: 500, sendRatio: 0.4, winThreshold: 1.5 },
+              ainu:       { attackChance: 0.1, recruitThreshold: 800, goldReserve: 1000, riceReserve: 1000, sendRatio: 0.3, winThreshold: 2.0 }
           };
           const prm = params[strategy] || params.balanced;
 
+          // 市場操作
           const marketPrice = getRiceMarketPrice(turn);
           if (gold > prm.goldReserve * 1.5 && rice < prm.riceReserve) {
               const buyAmount = 200;
@@ -209,100 +229,170 @@ const App = () => {
               rice -= sellAmount; gold += gain;
           }
 
-          if (aiId === 'Ainu' && Math.random() < 0.25) { 
-             const myProv = next.filter(p => p.ownerId === aiId);
-             const neighbors = [...new Set(myProv.flatMap(p => p.neighbors))].map(nid => next.find(x => x.id === nid)).filter(n => n && n.ownerId !== aiId);
-             if (neighbors.length > 0) {
-                 const target = neighbors[Math.floor(Math.random() * neighbors.length)];
-                 const targetId = target.ownerId;
-                 const isUnreasonable = Math.random() < 0.5;
-
-                 if (targetId === playerDaimyoId) {
-                     if (isUnreasonable) {
-                         setTimeout(() => setModalState({ type: 'incoming_request', data: { sourceId: 'Ainu', type: 'ainu_demand' } }), 500);
-                     } else {
-                         setTimeout(() => setModalState({ type: 'incoming_request', data: { sourceId: 'Ainu', type: 'ainu_trade' } }), 500);
-                     }
-                 } else {
-                     if (isUnreasonable) {
-                         setRelations(prev => ({
-                             ...prev,
-                             [aiId]: { ...prev[aiId], [targetId]: Math.max(0, (prev[aiId]?.[targetId]||50) - 20) },
-                             [targetId]: { ...prev[targetId], [aiId]: Math.max(0, (prev[targetId]?.[aiId]||50) - 20) }
-                         }));
-                         showLog(`アイヌが${DAIMYO_INFO[targetId].name}へ圧力をかけ、関係が悪化しました。`);
-                     } else {
-                         setRelations(prev => ({
-                             ...prev,
-                             [aiId]: { ...prev[aiId], [targetId]: Math.min(100, (prev[aiId]?.[targetId]||50) + 10) },
-                             [targetId]: { ...prev[targetId], [aiId]: Math.min(100, (prev[targetId]?.[aiId]||50) + 10) }
-                         }));
-                     }
-                 }
-             }
-          }
-
           const myProvinces = next.filter(p => p.ownerId === aiId);
-          
+          const hasTarget = targetProvinceId && myProvinces.some(p => p.id === targetProvinceId);
+          const targetProvData = targetProvinceId ? next.find(p => p.id === targetProvinceId) : null;
+
           myProvinces.forEach(p => {
               while (p.actionsLeft > 0) {
                   const neighbors = p.neighbors.map(nid => next.find(x => x.id === nid)).filter(n => n);
                   const enemies = neighbors.filter(n => n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
                   const isFrontline = enemies.length > 0;
 
-                  const maxThreat = enemies.length > 0 ? Math.max(...enemies.map(e => e.troops)) : 0;
-                  const requiredDefense = Math.floor(maxThreat * prm.safetyMargin);
-                  
-                  const isEmergency = isFrontline && p.troops < requiredDefense;
+                  const currentLoyalty = p.loyalty || 50;
+                  const currentTraining = p.training || 50;
 
-                  const availableForAttack = Math.max(0, p.troops - requiredDefense);
-                  const attackForce = Math.floor(availableForAttack * 0.8);
-                  const weakEnemy = enemies.find(e => e.troops < attackForce * 0.9);
+                  // 1. 輸送 (Transport)
+                  if (!isFrontline && p.troops > 300 && gold >= COSTS.move.gold && rice >= COSTS.move.rice) {
+                      const allyNeighbors = neighbors.filter(n => n.ownerId === aiId);
+                      let dest = null;
 
+                      if (allyNeighbors.length > 0) {
+                          const frontlineAlly = allyNeighbors.find(an => {
+                              const anNeighbors = an.neighbors.map(nid => next.find(x => x.id === nid));
+                              return anNeighbors.some(ann => ann.ownerId !== aiId && !alliances[aiId]?.includes(ann.ownerId));
+                          });
+                          
+                          if (frontlineAlly) {
+                              dest = frontlineAlly;
+                          } else if (targetProvData) {
+                              dest = allyNeighbors.sort((a,b) => {
+                                  const dA = Math.sqrt((a.cx - targetProvData.cx)**2 + (a.cy - targetProvData.cy)**2);
+                                  const dB = Math.sqrt((b.cx - targetProvData.cx)**2 + (b.cy - targetProvData.cy)**2);
+                                  return dA - dB;
+                              })[0];
+                          } else {
+                              dest = allyNeighbors[Math.floor(Math.random() * allyNeighbors.length)];
+                          }
+                      }
+
+                      if (dest) {
+                          const amount = p.troops - 100; 
+                          p.troops -= amount;
+                          dest.troops += amount;
+                          gold -= COSTS.move.gold;
+                          rice -= COSTS.move.rice;
+                          p.actionsLeft--;
+                          continue;
+                      }
+                  }
+
+                  // 2. 施し (Pacify)
+                  if (currentLoyalty < 50 && gold >= COSTS.pacify.gold && rice >= COSTS.pacify.rice) {
+                      gold -= COSTS.pacify.gold;
+                      rice -= COSTS.pacify.rice;
+                      p.loyalty = Math.min(100, currentLoyalty + COSTS.pacify.boost);
+                      p.actionsLeft--;
+                      continue;
+                  }
+
+                  // 3. 普請 (Fortify)
+                  if (isFrontline && p.defense < 60 && gold >= COSTS.fortify.gold) {
+                      gold -= COSTS.fortify.gold;
+                      p.defense += COSTS.fortify.boost;
+                      p.actionsLeft--;
+                      continue;
+                  }
+
+                  // 4. 訓練 (Train)
+                  if (currentTraining < 70 && gold >= COSTS.train.gold * 2) { 
+                      gold -= COSTS.train.gold;
+                      p.training = Math.min(100, currentTraining + COSTS.train.boost);
+                      p.actionsLeft--;
+                      continue;
+                  }
+
+                  // 5. 攻撃 (Attack)
+                  const attackTroops = Math.floor(p.troops * prm.sendRatio);
+                  let target = null;
+                  let canAttack = true;
+
+                  if (attackTroops > 100 && rice >= COSTS.attack.rice + prm.riceReserve) {
+                      if (targetProvinceId && !hasTarget && targetProvData) {
+                          const directTarget = enemies.find(e => e.id === targetProvinceId);
+                          if (directTarget && directTarget.troops < attackTroops * prm.winThreshold) {
+                              target = directTarget;
+                          } else {
+                              let bestDist = Infinity;
+                              enemies.forEach(e => {
+                                  const dist = Math.sqrt(Math.pow(e.cx - targetProvData.cx, 2) + Math.pow(e.cy - targetProvData.cy, 2));
+                                  if (dist < bestDist && e.troops < attackTroops * prm.winThreshold) {
+                                      bestDist = dist;
+                                      target = e;
+                                  }
+                              });
+                          }
+                      }
+                      
+                      if (!target) {
+                          const potentialTargets = enemies.filter(e => e.troops < attackTroops * prm.winThreshold);
+                          if (potentialTargets.length > 0) {
+                               target = potentialTargets.sort((a,b) => a.troops - b.troops)[0];
+                          }
+                      }
+                  }
+
+                  const isEmergency = isFrontline && p.troops < 300;
                   if (isEmergency && gold >= COSTS.recruit.gold && rice >= COSTS.recruit.rice) {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
-                      p.troops += COSTS.recruit.troops; p.actionsLeft--;
-                      continue;
-                  }
-                  if (isEmergency && p.defense < 30 && gold >= COSTS.fortify.gold) {
-                      gold -= COSTS.fortify.gold; p.defense += COSTS.fortify.boost; p.actionsLeft--;
+                      p.troops += COSTS.recruit.troops;
+                      p.loyalty = Math.max(0, (p.loyalty||50) - 5); 
+                      p.actionsLeft--;
                       continue;
                   }
 
-                  let canAttack = true;
-                  if (aiId === 'Ainu' && weakEnemy) {
-                      const rel = relations[aiId]?.[weakEnemy.ownerId] ?? 50;
+                  if (aiId === 'Ainu' && target) {
+                      const rel = relations[aiId]?.[target.ownerId] ?? 50;
                       if (rel > 20) canAttack = false;
                   }
 
-                  if (weakEnemy && rice >= COSTS.attack.rice + prm.riceReserve && attackForce > 100 && Math.random() < prm.attackChance && canAttack) {
+                  if (target && canAttack && Math.random() < prm.attackChance) {
                       rice -= COSTS.attack.rice;
                       p.actionsLeft--;
-                      let atk = attackForce; 
+                      let atk = attackTroops; 
                       p.troops -= atk; 
-                      let def = weakEnemy.troops;
+                      let def = target.troops;
+                      
                       for(let r=0; r<10; r++) {
                           if(atk<=0 || def<=0) break;
                           atk -= Math.floor(def * 0.1); def -= Math.floor(atk * 0.15); 
                       }
+                      
                       if (def <= 0) {
-                          weakEnemy.ownerId = aiId;
-                          weakEnemy.troops = Math.max(1, atk);
-                          weakEnemy.actionsLeft = 0;
-                          showLog(`${DAIMYO_INFO[aiId].name}が${weakEnemy.name}を制圧！`);
+                          const oldOwner = target.ownerId;
+                          target.ownerId = aiId;
+                          target.troops = Math.max(1, atk);
+                          target.actionsLeft = 0;
+                          showLog(`${DAIMYO_INFO[aiId].name}が${target.name}を制圧！`);
+                          
+                          fame += 5; 
+                          setTimeout(() => updateResource(oldOwner, 0, 0, -5), 0);
+
                           p.actionsLeft = 0; 
                           continue; 
                       } else {
-                          weakEnemy.troops = def;
-                          p.troops += Math.floor(atk * 0.5); 
+                          target.troops = def;
+                          p.troops += Math.floor(atk * 0.5);
+                          
+                          if (atk <= 0) {
+                              fame -= 5;
+                              setTimeout(() => updateResource(target.ownerId, 0, 0, 5), 0);
+                          } else {
+                              fame -= 5;
+                              setTimeout(() => updateResource(target.ownerId, 0, 0, 5), 0);
+                          }
                       }
                   }
-
+                  
+                  // 通常徴兵
                   else if (isFrontline && p.troops < prm.recruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
-                      p.troops += COSTS.recruit.troops; p.actionsLeft--;
+                      p.troops += COSTS.recruit.troops;
+                      p.loyalty = Math.max(0, (p.loyalty||50) - 5);
+                      p.actionsLeft--;
                   }
-
+                  
+                  // 内政
                   else if (gold >= COSTS.develop.gold + prm.goldReserve) {
                       if (Math.random() > 0.5) {
                           gold -= COSTS.develop.gold; p.commerce += COSTS.develop.boost;
@@ -323,8 +413,7 @@ const App = () => {
           setTimeout(() => updateResource(aiId, gold - originalGold, rice - originalRice, fame - originalFame), 0);
           return next;
       });
-      // ▼ 変更: AI行動終了後の待機時間を短縮 (800ms -> 200ms)
-      setTimeout(advanceTurn, 200);
+      if (!isPaused) setTimeout(advanceTurn, aiSpeed);
   };
 
   const handleWheel = (e) => {
@@ -420,7 +509,7 @@ const App = () => {
 
           if (type === 'develop') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, commerce: pr.commerce + cost.boost} : pr)); showLog("商業開発完了"); }
           if (type === 'cultivate') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, agriculture: pr.agriculture + cost.boost} : pr)); showLog("開墾完了"); }
-          if (type === 'pacify') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, loyalty: Math.min(100, pr.loyalty + cost.boost)} : pr)); showLog("施しを行いました"); }
+          if (type === 'pacify') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, loyalty: Math.min(100, (pr.loyalty||50) + cost.boost)} : pr)); showLog("施しを行いました"); }
           if (type === 'fortify') { setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, defense: pr.defense + cost.boost} : pr)); showLog("普請完了"); }
       } else {
           if (type === 'market') setModalState({ type: 'market', data: { pid } });
@@ -437,14 +526,14 @@ const App = () => {
       if (type === 'train') {
           if (daimyoStats[playerDaimyoId].gold < COSTS.train.gold) return showLog("金不足");
           updateResource(playerDaimyoId, -COSTS.train.gold, 0);
-          setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, training: Math.min(100, pr.training + COSTS.train.boost)} : pr));
+          setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, training: Math.min(100, (pr.training||50) + COSTS.train.boost)} : pr));
           consumeAction(pid); showLog("訓練完了");
       }
       if (type === 'recruit') {
            const c = COSTS.recruit;
            if (daimyoStats[playerDaimyoId].gold < c.gold || daimyoStats[playerDaimyoId].rice < c.rice) return showLog("資源不足");
            updateResource(playerDaimyoId, -c.gold, -c.rice);
-           setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, troops: pr.troops + c.troops, loyalty: pr.loyalty - 5} : pr));
+           setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, troops: pr.troops + c.troops, loyalty: Math.max(0, (pr.loyalty||50) - 5)} : pr));
            consumeAction(pid); showLog("徴兵完了");
       }
       if (type === 'attack') { 
@@ -527,6 +616,17 @@ const App = () => {
         
         <ResourceBar stats={daimyoStats[playerDaimyoId]} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
 
+        <div className="absolute top-20 left-4 z-50">
+            {onSpeedChange && (
+               <SpectatorControls 
+                   aiSpeed={aiSpeed} 
+                   onSpeedChange={setAiSpeed} 
+                   isPaused={isPaused} 
+                   onPauseToggle={handlePauseToggle} 
+               />
+            )}
+        </div>
+
         <div className="absolute top-20 right-4 z-50 flex gap-2">
             <button 
                 onClick={() => setIsEditMode(!isEditMode)} 
@@ -591,8 +691,10 @@ const App = () => {
             onViewBack={() => setViewingRelationId(null)} viewingRelationId={viewingRelationId}
             onDaimyoList={() => setModalState({type: 'list'})}
             currentDaimyoId={currentDaimyoId}
+            isPaused={isPaused}
         />
         
+        {/* ... (Modals rendering) ... */}
         {modalState.type === 'incoming_request' && <IncomingRequestModal request={modalState.data} 
             onAccept={() => {
                 if (modalState.data.type === 'ainu_demand') {
@@ -661,9 +763,21 @@ const App = () => {
                  return p;
              }));
              
-             if (defenderRemaining <= 0) showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍が${defender.name}を制圧！`);
-             else if (attackerRemaining <= 0) showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}攻略に失敗。`);
-             else showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
+             if (defenderRemaining <= 0) {
+                 showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍が${defender.name}を制圧！`);
+                 updateResource(attacker.ownerId, 0, 0, 5); 
+                 updateResource(defender.ownerId, 0, 0, -5); 
+             }
+             else if (attackerRemaining <= 0) {
+                 showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}攻略に失敗。`);
+                 updateResource(attacker.ownerId, 0, 0, -5); 
+                 updateResource(defender.ownerId, 0, 0, 5); 
+             }
+             else {
+                 showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
+                 updateResource(attacker.ownerId, 0, 0, -5); 
+                 updateResource(defender.ownerId, 0, 0, 5); 
+             }
              setModalState({ type: null }); 
         }} />}
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={handleTroopAction} onCancel={() => setModalState({type: null})} />}
