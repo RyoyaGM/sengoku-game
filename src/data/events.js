@@ -1,19 +1,13 @@
-// src/data/events.js
-
 import { DAIMYO_INFO } from './daimyos';
 
-// ▼▼ 画像インポートエリア ▼▼
 import okehazamaHyojoImg from '../assets/okehazama_hyojo.jpg';
 import okehazamaMarchImg from '../assets/okehazama_march.jpg';
 import okehazamaSuccessImg from '../assets/okehazama_success.jpg';
 import okehazamaFailImg from '../assets/okehazama_fail.jpg';
 import okehazamaSiegeImg from '../assets/okehazama_rojo.jpg';
-// ▲▲ 画像インポートエリアここまで ▲▲
 
 export const HISTORICAL_EVENTS = [
-  // --------------------------------------------------------------------------
   // 1. 桶狭間の戦い (Turn 2)
-  // --------------------------------------------------------------------------
   {
     id: 'okehazama_phase1',
     title: '上洛の機運',
@@ -159,146 +153,7 @@ export const HISTORICAL_EVENTS = [
     }
   },
 
-  // --------------------------------------------------------------------------
-  // 2. 松平独立 (Turn 3)
-  // --------------------------------------------------------------------------
-  {
-    id: 'matsudaira_independence',
-    title: '松平独立',
-    image: null,
-    year: 1560, season: '秋',
-    
-    description: (daimyoId) => {
-        if (daimyoId === 'Tokugawa') return '今川義元の死により、今川家の支配が動揺しています。\n今こそ岡崎へ帰還し、独立を果たす好機です。';
-        if (daimyoId === 'Imagawa') return '松平元康（家康）が岡崎城に入り、不穏な動きを見せています。\n我が家からの独立を画策しているようです。';
-        return '桶狭間の混乱に乗じ、三河の松平元康（徳川家康）が今川家から独立を宣言しました。';
-    },
-
-    trigger: (turn, provinces, daimyoStats) => {
-        return turn === 3 && daimyoStats['Tokugawa'] && daimyoStats['Imagawa'];
-    },
-
-    choices: {
-        Tokugawa: [
-            {
-                text: '今川と手切れし、独立する',
-                description: '今川家への従属を破棄し、三河の主として名乗りを上げる。',
-                resolve: (ctx) => {
-                    ctx.showLog("松平元康は今川家からの独立を宣言！徳川家康と改名しました。");
-                    ctx.updateResource('Tokugawa', 500, 500, 50);
-                    ctx.updateRelation('Imagawa', -80);
-                    
-                    // 兵の移動・独立処理
-                    ctx.setProvinces(prev => {
-                        const okazaki = prev.find(p => p.id === 'okazaki');
-                        if (!okazaki) return prev;
-                        
-                        const totalTroops = okazaki.troops;
-                        const remainTroops = Math.floor(totalTroops * 0.3); // 3割残る
-                        const moveTroops = totalTroops - remainTroops;      // 7割は駿河へ
-
-                        return prev.map(p => {
-                            if (p.id === 'okazaki') {
-                                return { ...p, ownerId: 'Tokugawa', troops: remainTroops, loyalty: 100 };
-                            }
-                            if (p.id === 'sunpu') {
-                                return { ...p, troops: p.troops + moveTroops };
-                            }
-                            return p;
-                        });
-                    });
-                    return null;
-                }
-            },
-            {
-                text: '今はまだ雌伏の時',
-                description: '独立は時期尚早。今川家との関係を維持する。',
-                resolve: (ctx) => {
-                    ctx.showLog("徳川家は今川家への恭順を維持しました。");
-                    ctx.updateRelation('Imagawa', 20);
-                    return null;
-                }
-            }
-        ],
-        Imagawa: [
-            {
-                text: '独立を容認し、恩を売る',
-                description: '今は敵を増やすべきではない。独立を認め、同盟国として扱う。',
-                resolve: (ctx) => {
-                    ctx.showLog("今川家は松平の独立を容認しました。");
-                    ctx.updateRelation('Tokugawa', 10);
-                    
-                    // 独立はするので領地変更
-                    ctx.setProvinces(prev => {
-                        const okazaki = prev.find(p => p.id === 'okazaki');
-                        if (!okazaki) return prev;
-                        const totalTroops = okazaki.troops;
-                        const remainTroops = Math.floor(totalTroops * 0.3);
-                        const moveTroops = totalTroops - remainTroops;
-
-                        return prev.map(p => {
-                            if (p.id === 'okazaki') return { ...p, ownerId: 'Tokugawa', troops: remainTroops, loyalty: 100 };
-                            if (p.id === 'sunpu') return { ...p, troops: p.troops + moveTroops };
-                            return p;
-                        });
-                    });
-                    return null;
-                }
-            },
-            {
-                text: '断じて許さぬ、討伐せよ',
-                description: '裏切り者は許さない。直ちに関係を断絶する。',
-                resolve: (ctx) => {
-                    ctx.showLog("今川家は松平の独立に激怒しています。関係が断絶しました。");
-                    ctx.updateRelation('Tokugawa', -100);
-                    // 強制独立
-                    ctx.setProvinces(prev => {
-                        const okazaki = prev.find(p => p.id === 'okazaki');
-                        if (!okazaki) return prev;
-                        const totalTroops = okazaki.troops;
-                        const remainTroops = Math.floor(totalTroops * 0.3);
-                        const moveTroops = totalTroops - remainTroops;
-
-                        return prev.map(p => {
-                            if (p.id === 'okazaki') return { ...p, ownerId: 'Tokugawa', troops: remainTroops, loyalty: 100 };
-                            if (p.id === 'sunpu') return { ...p, troops: p.troops + moveTroops };
-                            return p;
-                        });
-                    });
-                    return null;
-                }
-            }
-        ]
-    },
-    defaultResolve: (ctx) => {
-        ctx.showLog("松平元康（徳川家康）が今川家より独立。三河の支配を固めました。");
-        ctx.updateRelation('Imagawa', -50);
-        
-        ctx.setProvinces(prev => {
-            const okazaki = prev.find(p => p.id === 'okazaki');
-            if (!okazaki) return prev;
-            
-            const totalTroops = okazaki.troops;
-            const remainTroops = Math.floor(totalTroops * 0.3);
-            const moveTroops = totalTroops - remainTroops;
-
-            return prev.map(p => {
-                if (p.id === 'okazaki') {
-                    return { ...p, ownerId: 'Tokugawa', troops: remainTroops, loyalty: 100 };
-                }
-                if (p.id === 'sunpu') {
-                    return { ...p, troops: p.troops + moveTroops };
-                }
-                return p;
-            });
-        });
-        return null;
-    }
-  },
-
-  // --------------------------------------------------------------------------
   // 3. 清州同盟 (Turn 4)
-  // --------------------------------------------------------------------------
   {
     id: 'kiyosu_alliance',
     title: '清州同盟',
@@ -347,9 +202,7 @@ export const HISTORICAL_EVENTS = [
     defaultResolve: (ctx) => resolveKiyosuAlliance(ctx)
   },
 
-  // --------------------------------------------------------------------------
   // 4. 斎藤義龍の死 (Turn 6)
-  // --------------------------------------------------------------------------
   {
     id: 'saito_death',
     title: '斎藤義龍の死',
@@ -395,9 +248,7 @@ export const HISTORICAL_EVENTS = [
     }
   },
 
-  // --------------------------------------------------------------------------
   // 5. 遠州忩劇 (Turn 8)
-  // --------------------------------------------------------------------------
   {
     id: 'enshu_so_geki',
     title: '遠州忩劇',
@@ -431,9 +282,7 @@ export const HISTORICAL_EVENTS = [
     }
   },
 
-  // --------------------------------------------------------------------------
   // 6. 駿河侵攻 (Turn 12)
-  // --------------------------------------------------------------------------
   {
     id: 'suruga_invasion',
     title: '駿河侵攻',
@@ -502,16 +351,13 @@ const resolveKiyosuAlliance = (ctx) => {
 };
 
 const resolveSurugaInvasion = (ctx) => {
-    // 同盟関係の変更
     ctx.setAlliances(prev => {
         const next = { ...prev };
         
-        // ヘルパー: 配列から削除
         const remove = (a, b) => {
             if (next[a]) next[a] = next[a].filter(id => id !== b);
             if (next[b]) next[b] = next[b].filter(id => id !== a);
         };
-        // ヘルパー: 配列に追加
         const add = (a, b) => {
             if (!next[a]) next[a] = [];
             if (!next[a].includes(b)) next[a].push(b);
@@ -529,7 +375,6 @@ const resolveSurugaInvasion = (ctx) => {
         return next;
     });
 
-    // 関係値の変更
     ctx.setRelations(prev => {
         const next = { ...prev };
         const setRel = (a, b, val) => {
@@ -547,7 +392,6 @@ const resolveSurugaInvasion = (ctx) => {
         return next;
     });
 
-    // 兵パラメータ変動
     ctx.setProvinces(prev => prev.map(p => {
         if (p.ownerId === 'Takeda') return { ...p, training: Math.min(100, (p.training || 50) + 10) };
         if (p.ownerId === 'Imagawa') return { ...p, loyalty: Math.max(0, (p.loyalty || 50) - 20) };
