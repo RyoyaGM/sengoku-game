@@ -6,8 +6,12 @@ import okehazamaSuccessImg from '../assets/okehazama_success.jpg';
 import okehazamaFailImg from '../assets/okehazama_fail.jpg';
 import okehazamaSiegeImg from '../assets/okehazama_rojo.jpg';
 
+// ゲーム内カレンダーロジック:
+// Turn 1 = 1560年 春
+// 1年 = 4ターン
+
 export const HISTORICAL_EVENTS = [
-  // 1. 桶狭間の戦い (Turn 2)
+  // 1. 桶狭間の戦い (Turn 2: 1560年 夏)
   {
     id: 'okehazama_phase1',
     title: '上洛の機運',
@@ -153,17 +157,127 @@ export const HISTORICAL_EVENTS = [
     }
   },
 
-  // 3. 清州同盟 (Turn 4)
+  // 2. 松平独立 (Turn 3: 1560年 秋)
+  // 史実: 桶狭間の直後、岡崎城にて独立
+  {
+    id: 'matsudaira_independence',
+    title: '松平元康の独立',
+    image: null,
+    year: 1560, season: '秋',
+
+    description: (daimyoId) => {
+        if (daimyoId === 'Tokugawa') return '今川義元の死により、今川家は混乱の極みにあります。\n長年、今川の人質として耐え忍んできましたが、ついに故郷・岡崎城への帰還を果たしました。\n今こそ、今川の支配を脱し、三河松平家の再興を宣言する時です。';
+        if (daimyoId === 'Imagawa') return '松平元康が岡崎城にて勝手に兵を動かしているとの報告が入りました。\n義元公の弔い合戦もせぬまま、独立を企てているようです。\n許しがたい裏切りですが、今の我々にこれを止める余力があるでしょうか...';
+        return '三河の松平元康が、今川家の混乱に乗じて岡崎城で独立を宣言しました。\n今川の支配力は大きく低下し、東海の情勢が変わりつつあります。';
+    },
+
+    trigger: (turn, provinces, daimyoStats) => {
+        return turn === 3 && daimyoStats['Tokugawa'] && daimyoStats['Imagawa'];
+    },
+
+    choices: {
+        Tokugawa: [
+            {
+                text: '独立を宣言する',
+                description: '今川家と手切れし、三河の主として名乗りを上げる。',
+                resolve: (ctx) => resolveMatsudairaIndependence(ctx, true)
+            },
+            {
+                text: '今はまだ雌伏の時',
+                description: '独立は時期尚早。今川家への義理を通し、好機を待つ。',
+                resolve: (ctx) => {
+                    ctx.showLog("徳川家は今川家への忠誠を維持しました。");
+                    return null;
+                }
+            }
+        ],
+        Imagawa: [
+            {
+                text: '独立を容認する',
+                description: '阻止する力はない... 黙認し、無用な争いを避ける。',
+                resolve: (ctx) => resolveMatsudairaIndependence(ctx, false)
+            },
+            {
+                text: '討伐令を出す',
+                description: '裏切りは許さぬ。断固として戦う姿勢を示す。',
+                resolve: (ctx) => {
+                     ctx.showLog("今川家は松平元康に対し討伐令を出しました！関係が「敵対」になります。");
+                     ctx.setRelations(prev => ({
+                        ...prev,
+                        Imagawa: { ...(prev.Imagawa || {}), Tokugawa: 0 },
+                        Tokugawa: { ...(prev.Tokugawa || {}), Imagawa: 0 }
+                     }));
+                     // 同盟破棄
+                     ctx.setAlliances(prev => {
+                        const next = { ...prev };
+                        if (next['Imagawa']) next['Imagawa'] = next['Imagawa'].filter(id => id !== 'Tokugawa');
+                        if (next['Tokugawa']) next['Tokugawa'] = next['Tokugawa'].filter(id => id !== 'Imagawa');
+                        return next;
+                     });
+                     return null;
+                }
+            }
+        ]
+    },
+
+    defaultResolve: (ctx) => resolveMatsudairaIndependence(ctx, false)
+  },
+
+  // 3. 斎藤義龍の死 (Turn 6: 1561年 夏)
+  {
+    id: 'saito_death',
+    title: '斎藤義龍の死',
+    image: null,
+    year: 1561, season: '夏',
+
+    description: '美濃の蝮と恐れられた斎藤義龍が急死しました。\n後を継いだ龍興は若く、家臣団の統制に苦しんでいるようです。\n美濃攻略の好機が訪れました。',
+
+    trigger: (turn, provinces, daimyoStats) => {
+        return turn === 6 && daimyoStats['Saito'];
+    },
+
+    defaultResolve: (ctx) => {
+        ctx.showLog("斎藤義龍が病没。美濃国内で動揺が広がっています。");
+        
+        ctx.setDaimyoStats(prev => {
+            const s = prev['Saito'];
+            if (!s) return prev;
+            return {
+                ...prev,
+                Saito: {
+                    ...s,
+                    gold: Math.floor(s.gold * 0.7),
+                    rice: Math.floor(s.rice * 0.7)
+                }
+            };
+        });
+
+        ctx.setProvinces(prev => prev.map(p => {
+            if (p.ownerId === 'Saito') {
+                return { 
+                    ...p, 
+                    troops: Math.floor(p.troops * 0.7),
+                    loyalty: Math.max(0, (p.loyalty || 50) - 20),
+                    defense: Math.max(0, p.defense - 10)
+                };
+            }
+            return p;
+        }));
+        return null;
+    }
+  },
+
+  // 4. 清州同盟 (Turn 9: 1562年 春)
   {
     id: 'kiyosu_alliance',
     title: '清州同盟',
     image: null,
-    year: 1561, season: '春',
+    year: 1562, season: '春',
 
     description: '織田信長と徳川家康、両雄が清洲城にて会談。\n東西の憂いを断つため、同盟を結ぶ運びとなりました。',
 
     trigger: (turn, provinces, daimyoStats) => {
-        return turn === 4 && daimyoStats['Oda'] && daimyoStats['Tokugawa'];
+        return turn === 9 && daimyoStats['Oda'] && daimyoStats['Tokugawa'];
     },
 
     choices: {
@@ -202,63 +316,17 @@ export const HISTORICAL_EVENTS = [
     defaultResolve: (ctx) => resolveKiyosuAlliance(ctx)
   },
 
-  // 4. 斎藤義龍の死 (Turn 6)
-  {
-    id: 'saito_death',
-    title: '斎藤義龍の死',
-    image: null,
-    year: 1561, season: '秋',
-
-    description: '美濃の蝮と恐れられた斎藤義龍が急死しました。\n後を継いだ龍興は若く、家臣団の統制に苦しんでいるようです。\n美濃攻略の好機が訪れました。',
-
-    trigger: (turn, provinces, daimyoStats) => {
-        return turn === 6 && daimyoStats['Saito'];
-    },
-
-    defaultResolve: (ctx) => {
-        ctx.showLog("斎藤義龍が病没。美濃国内で動揺が広がっています。");
-        
-        // 資源（金・兵糧）を3割減 (0.7倍)
-        ctx.setDaimyoStats(prev => {
-            const s = prev['Saito'];
-            if (!s) return prev;
-            return {
-                ...prev,
-                Saito: {
-                    ...s,
-                    gold: Math.floor(s.gold * 0.7),
-                    rice: Math.floor(s.rice * 0.7)
-                }
-            };
-        });
-
-        // 全領土の兵数を3割減 (0.7倍)
-        ctx.setProvinces(prev => prev.map(p => {
-            if (p.ownerId === 'Saito') {
-                return { 
-                    ...p, 
-                    troops: Math.floor(p.troops * 0.7),
-                    loyalty: Math.max(0, (p.loyalty || 50) - 20),
-                    defense: Math.max(0, p.defense - 10)
-                };
-            }
-            return p;
-        }));
-        return null;
-    }
-  },
-
-  // 5. 遠州忩劇 (Turn 8)
+  // 5. 遠州忩劇 (Turn 12: 1562年 冬)
   {
     id: 'enshu_so_geki',
     title: '遠州忩劇',
     image: null,
-    year: 1562, season: '春',
+    year: 1562, season: '冬',
 
     description: '今川家の弱体化に伴い、遠江（遠州）の国人衆が一斉に反乱を起こしました（遠州忩劇）。\n今川氏真は対応に追われ、統制力を失いつつあります。',
 
     trigger: (turn, provinces, daimyoStats) => {
-        return turn === 8 && daimyoStats['Imagawa'];
+        return turn === 12 && daimyoStats['Imagawa'];
     },
 
     defaultResolve: (ctx) => {
@@ -282,7 +350,7 @@ export const HISTORICAL_EVENTS = [
     }
   },
 
-  // 6. 駿河侵攻 (Turn 12)
+  // 6. 駿河侵攻 (Turn 36: 1568年 冬)
   {
     id: 'suruga_invasion',
     title: '駿河侵攻',
@@ -292,7 +360,7 @@ export const HISTORICAL_EVENTS = [
     description: '甲斐の武田信玄が甲相駿三国同盟を破棄し、駿河への侵攻を開始しました。\n今川家は最大の危機を迎えています。',
 
     trigger: (turn, provinces, daimyoStats) => {
-        return turn === 12 && daimyoStats['Takeda'] && daimyoStats['Imagawa'];
+        return turn === 36 && daimyoStats['Takeda'] && daimyoStats['Imagawa'];
     },
 
     choices: {
@@ -327,6 +395,56 @@ export const HISTORICAL_EVENTS = [
 
 
 // ▼ ヘルパー関数
+
+const resolveMatsudairaIndependence = (ctx, isPlayerTokugawa) => {
+    ctx.showLog("【歴史イベント】松平元康（徳川家康）が今川家から独立を宣言！三河の地を取り戻しました。");
+
+    // 1. 同盟関係の解消 (今川-徳川)
+    ctx.setAlliances(prev => {
+        const next = { ...prev };
+        if (next['Imagawa']) next['Imagawa'] = next['Imagawa'].filter(id => id !== 'Tokugawa');
+        if (next['Tokugawa']) next['Tokugawa'] = next['Tokugawa'].filter(id => id !== 'Imagawa');
+        return next;
+    });
+
+    // 2. 関係値の変動
+    ctx.setRelations(prev => ({
+        ...prev,
+        // 今川とは手切れ（関係悪化）
+        Imagawa: { ...(prev.Imagawa || {}), Tokugawa: 20 },
+        Tokugawa: { ...(prev.Tokugawa || {}), Imagawa: 20 },
+        // 織田とは接近（関係改善）
+        Oda: { ...(prev.Oda || {}), Tokugawa: 60 },
+        Tokugawa: { ...(prev.Tokugawa || {}), Oda: 60 }
+    }));
+
+    // 3. 徳川家へのボーナス
+    ctx.updateResource('Tokugawa', 500, 500, 50); 
+
+    ctx.setProvinces(prev => prev.map(p => {
+        if (p.ownerId === 'Tokugawa') {
+            return { 
+                ...p, 
+                troops: p.troops + 200, 
+                loyalty: 100,
+                training: Math.min(100, (p.training || 50) + 20)
+            };
+        }
+        return p;
+    }));
+    
+    // 4. 今川家の弱体化
+    ctx.updateResource('Imagawa', 0, 0, -20);
+
+    return {
+        title: '松平独立',
+        image: null, 
+        description: isPlayerTokugawa 
+            ? '独立を宣言しました！\n今川のくびきを脱し、これよりは織田と結んで天下を目指します。\n名は「徳川家康」と改めましょう。'
+            : '松平元康は「徳川家康」と名を改め、今川家との従属関係を破棄しました。\n三河における今川の影響力は失われました。',
+        year: 1560, season: '秋'
+    };
+};
 
 const resolveKiyosuAlliance = (ctx) => {
     ctx.showLog("織田家と徳川家が固い同盟を結びました（清州同盟）。");
@@ -393,7 +511,7 @@ const resolveSurugaInvasion = (ctx) => {
     });
 
     ctx.setProvinces(prev => prev.map(p => {
-        if (p.ownerId === 'Takeda') return { ...p, training: Math.min(100, (p.training || 50) + 10) };
+        if (p.ownerId === 'Takeda') return { ...p, training: Math.min(100, (p.training || 50) + 20) };
         if (p.ownerId === 'Imagawa') return { ...p, loyalty: Math.max(0, (p.loyalty || 50) - 20) };
         return p;
     }));
