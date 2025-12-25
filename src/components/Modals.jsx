@@ -177,12 +177,17 @@ export const NegotiationScene = ({ targetDaimyoId, targetDaimyo, isAllied, onCon
     </div>
 );
 
+// ▼ 修正: データの存在チェックを追加してクラッシュを防ぐ
 export const DaimyoListModal = ({ provinces, daimyoStats, alliances, ceasefires, relations, onClose, playerDaimyoId, coalition, onViewOnMap }) => {
-  const activeDaimyos = Object.keys(DAIMYO_INFO).filter(id => id !== 'Minor').map(id => {
-    const count = provinces.filter(p => p.ownerId === id).length;
-    const stats = daimyoStats[id];
-    return { id, ...DAIMYO_INFO[id], count, stats };
-  }).sort((a,b) => b.stats.fame - a.stats.fame);
+  const activeDaimyos = Object.keys(DAIMYO_INFO)
+    .filter(id => id !== 'Minor')
+    .map(id => {
+      const count = provinces.filter(p => p.ownerId === id).length;
+      const stats = daimyoStats[id];
+      return { id, ...DAIMYO_INFO[id], count, stats };
+    })
+    .filter(d => d.stats) // statsが存在するものだけフィルタリング
+    .sort((a,b) => (b.stats?.fame || 0) - (a.stats?.fame || 0));
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
