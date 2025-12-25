@@ -1444,73 +1444,123 @@ const App = () => {
 
 
   const processAiTurn = (aiId) => {
-
-      let changes = {};
-
       setProvinces(curr => {
-
           const next = curr.map(p => ({...p}));
+          let { gold, rice, fame } = daimyoStats[aiId] || { gold:0, rice:0, fame: 0 };
+          const originalGold = gold;
+          const originalRice = rice;
+          const originalFame = fame;
+          
+          // 戦略設定の取得 (デフォルトはbalanced)
+          const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
+          
+          // 戦略別パラメータ定義
+          const params = {
+              aggressive: { attackChance: 0.8, attackThreshold: 300, recruitThreshold: 400, saveRice: false },
+              balanced:   { attackChance: 0.5, attackThreshold: 500, recruitThreshold: 500, saveRice: false },
+              defensive:  { attackChance: 0.2, attackThreshold: 800, recruitThreshold: 700, saveRice: true }
+          };
+          const prm = params[strategy];
 
-          const myProvs = next.filter(p => p.ownerId === aiId);
+          // 1. 市場介入 (戦略により傾向を変える)
+          const marketPrice = getRiceMarketPrice(turn);
+          if (gold > 1000 && rice < 300) {
+              const buyAmount = 200;
+              const cost = Math.floor(buyAmount * marketPrice * 1.2);
+              if (gold > cost) { gold -= cost; rice += buyAmount; }
+          } else if (rice > 1500 && gold < 300 && !prm.saveRice) {
+              // 守勢AIは米を売りにくい（兵糧攻め対策）
+              const sellAmount = 300;
+              const gain = Math.floor(sellAmount * marketPrice * 0.8);
+              rice -= sellAmount; gold += gain;
+          }
 
-          let { gold, rice } = daimyoStats[aiId] || { gold:0, rice:0 };
+          const myProvinces = next.filter(p => p.ownerId === aiId);
+          
+          myProvinces.forEach(p => {
+              while (p.actionsLeft > 0) {
+                  const neighbors = p.neighbors.map(nid => next.find(x => x.id === nid)).filter(n => n);
+                  const enemies = neighbors.filter(n => n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
+                  // 弱敵を探す (好戦的AIは多少兵数差があっても攻める)
+                  const weakEnemy = enemies.find(e => e.troops < p.troops * (strategy === 'aggressive' ? 0.9 : 0.6)); 
+                  const isFrontline = enemies.length > 0;
 
+                  // A. 軍事行動 (攻撃)
+                  // 兵糧と兵数が十分で、かつ確率判定に成功すれば攻撃
+                  if (weakEnemy && rice >= COSTS.attack.rice && p.troops > prm.attackThreshold && Math.random() < prm.attackChance) {
+                      rice -= COSTS.attack.rice;
+                      p.actionsLeft--;
+                      
+                      let atk = Math.floor(p.troops * 0.6); 
+                      p.troops -= atk;
+                      let def = weakEnemy.troops;
+                      
+                      for(let r=0; r<10; r++) {
+                          if(atk<=0 || def<=0) break;
+                          atk -= Math.floor(def * 0.1); 
+                          def -= Math.floor(atk * 0.15); 
+                      }
 
+                      if (def <= 0) {
+                          weakEnemy.ownerId = aiId;
+                          weakEnemy.troops = Math.max(1, atk);
+                          weakEnemy.actionsLeft = 0;
+                          showLog(`${DAIMYO_INFO[aiId].name}が${weakEnemy.name}を制圧！`);
+                          continue; 
+                      } else {
+                          weakEnemy.troops = def;
+                          p.troops += Math.floor(atk * 0.5); 
+                      }
+                  }
 
-          myProvs.forEach(p => {
+                  // B. 軍事増強 (徴兵)
+                  else if (isFrontline && p.troops < prm.recruitThreshold && gold >= COSTS.recruit.gold && rice >= COSTS.recruit.rice) {
+                      gold -= COSTS.recruit.gold;
+                      rice -= COSTS.recruit.rice;
+                      p.troops += COSTS.recruit.troops;
+                      p.actionsLeft--;
+                  }
 
-              // 徴兵
+                  // C. 防御 (普請)
+                  // 守勢AIは防御度を高めようとする
+                  else if (isFrontline && p.defense < (strategy === 'defensive' ? 80 : 40) && gold >= COSTS.fortify.gold) {
+                      gold -= COSTS.fortify.gold;
+                      p.defense += COSTS.fortify.boost;
+                      p.actionsLeft--;
+                  }
 
-              if (gold > COSTS.recruit.gold && p.troops < 300) { 
+                  // D. 内政
+                  else if (gold >= COSTS.develop.gold) {
+                      if (Math.random() > 0.5) {
+                          gold -= COSTS.develop.gold;
+                          p.commerce += COSTS.develop.boost;
+                      } else if (gold >= COSTS.cultivate.gold && rice >= COSTS.cultivate.rice) {
+                          gold -= COSTS.cultivate.gold;
+                          rice -= COSTS.cultivate.rice;
+                          p.agriculture += COSTS.cultivate.boost;
+                      }
+                      p.actionsLeft--;
+                  }
+                  
+                  // E. 名声 (献金)
+                  else if (gold > 3000) {
+                      const donateAmount = 500;
+                      gold -= donateAmount;
+                      fame += Math.floor(donateAmount / 100);
+                      p.actionsLeft--;
+                  }
 
-                  gold -= COSTS.recruit.gold; p.troops += 150;
-
+                  else {
+                      p.actionsLeft = 0;
+                  }
               }
-
-              // 攻撃判断
-
-              const targets = p.neighbors.map(n => next.find(x => x.id === n)).filter(n => n && n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
-
-              if (targets.length && rice > COSTS.attack.rice && p.troops > 400 && Math.random() > 0.7) { 
-
-                   const target = targets[0];
-
-                   rice -= COSTS.attack.rice;
-
-                   let atk = Math.floor(p.troops * 0.6); p.troops -= atk;
-
-                   let def = target.troops;
-
-                   // 簡易戦闘 (最大10ラウンド)
-
-                   for(let r=0; r<10; r++) {
-
-                       if(atk<=0 || def<=0) break;
-
-                       atk -= Math.floor(def*0.1); 
-
-                       def -= Math.floor(atk*0.15); 
-
-                   }
-
-                   if (def <= 0) { target.ownerId = aiId; target.troops = Math.max(1, atk); showLog(`${DAIMYO_INFO[aiId].name}が${target.name}を制圧！`); }
-
-                   else { target.troops = def; }
-
-              }
-
           });
 
-          setTimeout(() => updateResource(aiId, gold - (daimyoStats[aiId].gold), rice - (daimyoStats[aiId].rice)), 0);
-
+          setTimeout(() => updateResource(aiId, gold - originalGold, rice - originalRice, fame - originalFame), 0);
           return next;
-
       });
-
-      setTimeout(advanceTurn, 500);
-
+      setTimeout(advanceTurn, 800);
   };
-
 
 
   // 4. Action Handlers (Categorized)
