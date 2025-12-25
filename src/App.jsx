@@ -10,6 +10,8 @@ import {
   INITIAL_PROVINCES 
 } from './utils/initializers';
 
+import japanMapImg from './assets/japan_map.jpg'; 
+
 // 分割したコンポーネントをインポート
 import { StartScreen, ResourceBar, ControlPanel } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
@@ -43,6 +45,10 @@ const App = () => {
   const [mapTransform, setMapTransform] = useState({ x: 0, y: 0, scale: 0.6 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+
+  // 編集モード用のState
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [draggingProvinceId, setDraggingProvinceId] = useState(null);
 
   // Modal State
   const [modalState, setModalState] = useState({ type: null, data: null }); 
@@ -124,7 +130,7 @@ const App = () => {
 
   const advanceTurn = () => { setSelectedProvinceId(null); setAttackSourceId(null); setTransportSourceId(null); setCurrentTurnIndex(prev => prev + 1); };
 
-// AIのターン処理 (備蓄・緊急事態判断版)
+  // AI Logic
   const processAiTurn = (aiId) => {
       setProvinces(curr => {
           const next = curr.map(p => ({...p}));
@@ -135,7 +141,6 @@ const App = () => {
           
           const strategy = DAIMYO_INFO[aiId]?.strategy || 'balanced';
           
-          // 戦略別パラメータ (Reserve: この数値を下回ってまで内政や攻撃をしない)
           const params = {
               aggressive: { attackChance: 0.8, recruitThreshold: 400, safetyMargin: 0.4, goldReserve: 300, riceReserve: 300 },
               balanced:   { attackChance: 0.5, recruitThreshold: 500, safetyMargin: 0.8, goldReserve: 1000, riceReserve: 1000 },
@@ -143,15 +148,12 @@ const App = () => {
           };
           const prm = params[strategy];
 
-          // 1. 市場介入 (備蓄を維持するための売買)
           const marketPrice = getRiceMarketPrice(turn);
-          // 備蓄割れ＆金に余裕があれば米を買う
           if (gold > prm.goldReserve * 1.5 && rice < prm.riceReserve) {
               const buyAmount = 200;
               const cost = Math.floor(buyAmount * marketPrice * 1.2);
               if (gold > cost + prm.goldReserve) { gold -= cost; rice += buyAmount; }
           } 
-          // 備蓄割れ＆米に余裕があれば売って金にする
           else if (rice > prm.riceReserve * 1.5 && gold < prm.goldReserve) {
               const sellAmount = 200;
               const gain = Math.floor(sellAmount * marketPrice * 0.8);
@@ -166,21 +168,15 @@ const App = () => {
                   const enemies = neighbors.filter(n => n.ownerId !== aiId && !alliances[aiId]?.includes(n.ownerId));
                   const isFrontline = enemies.length > 0;
 
-                  // 脅威度評価
                   const maxThreat = enemies.length > 0 ? Math.max(...enemies.map(e => e.troops)) : 0;
-                  const requiredDefense = Math.floor(maxThreat * prm.safetyMargin); // 防衛に必要な兵数
+                  const requiredDefense = Math.floor(maxThreat * prm.safetyMargin);
                   
-                  // 緊急事態か？（前線で、かつ兵数が防衛ラインを割っている）
                   const isEmergency = isFrontline && p.troops < requiredDefense;
 
-                  // 攻撃可能な余剰兵力
                   const availableForAttack = Math.max(0, p.troops - requiredDefense);
                   const attackForce = Math.floor(availableForAttack * 0.8);
                   const weakEnemy = enemies.find(e => e.troops < attackForce * 0.9);
 
-                  // --- 行動選択 ---
-
-                  // A. 緊急防衛 (備蓄を無視してでも実行)
                   if (isEmergency && gold >= COSTS.recruit.gold && rice >= COSTS.recruit.rice) {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
                       p.troops += COSTS.recruit.troops; p.actionsLeft--;
@@ -191,28 +187,22 @@ const App = () => {
                       continue;
                   }
 
-                  // B. 攻撃 (備蓄と兵糧に余裕がある場合のみ)
-                  // ※攻撃はリスクが高いため、riceReserve をしっかり確保する
                   if (weakEnemy && rice >= COSTS.attack.rice + prm.riceReserve && attackForce > 100 && Math.random() < prm.attackChance) {
                       rice -= COSTS.attack.rice;
                       p.actionsLeft--;
-                      
                       let atk = attackForce; 
                       p.troops -= atk; 
                       let def = weakEnemy.troops;
-                      
                       for(let r=0; r<10; r++) {
                           if(atk<=0 || def<=0) break;
-                          atk -= Math.floor(def * 0.1); 
-                          def -= Math.floor(atk * 0.15); 
+                          atk -= Math.floor(def * 0.1); def -= Math.floor(atk * 0.15); 
                       }
-
                       if (def <= 0) {
                           weakEnemy.ownerId = aiId;
                           weakEnemy.troops = Math.max(1, atk);
                           weakEnemy.actionsLeft = 0;
                           showLog(`${DAIMYO_INFO[aiId].name}が${weakEnemy.name}を制圧！`);
-                          p.actionsLeft = 0; // 攻撃後は休息
+                          p.actionsLeft = 0; 
                           continue; 
                       } else {
                           weakEnemy.troops = def;
@@ -220,13 +210,11 @@ const App = () => {
                       }
                   }
 
-                  // C. 平時の軍備増強 (備蓄を守りつつ行う)
                   else if (isFrontline && p.troops < prm.recruitThreshold && gold >= COSTS.recruit.gold + prm.goldReserve && rice >= COSTS.recruit.rice + prm.riceReserve) {
                       gold -= COSTS.recruit.gold; rice -= COSTS.recruit.rice;
                       p.troops += COSTS.recruit.troops; p.actionsLeft--;
                   }
 
-                  // D. 内政 (余剰資金でのみ行う)
                   else if (gold >= COSTS.develop.gold + prm.goldReserve) {
                       if (Math.random() > 0.5) {
                           gold -= COSTS.develop.gold; p.commerce += COSTS.develop.boost;
@@ -235,14 +223,10 @@ const App = () => {
                       }
                       p.actionsLeft--;
                   }
-                  
-                  // E. 名声・献金 (大金持ちのみ)
                   else if (gold > 5000) { 
                       const donateAmount = 500; gold -= donateAmount; fame += Math.floor(donateAmount / 100); p.actionsLeft--;
                   }
-
                   else {
-                      // 備蓄を守るため、またはやることがない場合は行動終了
                       p.actionsLeft = 0;
                   }
               }
@@ -253,7 +237,7 @@ const App = () => {
       });
       setTimeout(advanceTurn, 800);
   };
-  
+
   const handleWheel = (e) => {
     const scaleAmount = -e.deltaY * 0.001;
     const newScale = Math.min(Math.max(0.2, mapTransform.scale + scaleAmount), 3);
@@ -261,6 +245,77 @@ const App = () => {
     const newX = e.clientX - (e.clientX - mapTransform.x) * ratio;
     const newY = e.clientY - (e.clientY - mapTransform.y) * ratio;
     setMapTransform({ x: newX, y: newY, scale: newScale });
+  };
+
+  // 編集モード用のハンドラ
+  const handleProvinceDragStart = (pid, e) => {
+      setDraggingProvinceId(pid);
+  };
+
+  const handleGlobalMouseMove = (e) => {
+      if (draggingProvinceId && isEditMode) {
+          const deltaX = e.movementX / mapTransform.scale;
+          const deltaY = e.movementY / mapTransform.scale;
+
+          setProvinces(prev => prev.map(p => {
+              if (p.id === draggingProvinceId) {
+                  return { ...p, cx: p.cx + deltaX, cy: p.cy + deltaY };
+              }
+              return p;
+          }));
+      } else if (e.buttons === 1) {
+          if (Math.abs(e.clientX - dragStartPos.x) > 5 || Math.abs(e.clientY - dragStartPos.y) > 5) {
+              setIsDragging(true);
+              setMapTransform(p => ({ ...p, x: p.x + e.movementX, y: p.y + e.movementY }));
+          }
+      }
+  };
+
+  const handleGlobalMouseUp = () => {
+      setDraggingProvinceId(null);
+      setIsDragging(false);
+  };
+
+  // データ出力機能
+  const exportData = () => {
+      const dataStr = `export const SEA_ROUTES = [\n` +
+          `    ['usukeshi', 'tsugaru'],\n` +
+          `    ['usukeshi', 'sannohe'],\n` +
+          `    ['matsumae', 'tsugaru'],\n` +
+          `    ['sado', 'kasugayama'],\n` +
+          `    ['oki', 'gassan-toda'],\n` +
+          `    ['sumoto', 'hyogo'],\n` +
+          `    ['sumoto', 'tokushima'],\n` +
+          `    ['imabari', 'fukuyama'],\n` +
+          `    ['imabari', 'itsukushima'],\n` +
+          `    ['imabari', 'funai'],\n` +
+          `    ['shimonoseki', 'kokura'],\n` +
+          `    ['shimonoseki', 'hakata'],\n` +
+          `    ['tsushima', 'iki'],\n` +
+          `    ['iki', 'matsuura'],\n` +
+          `    ['tanegashima', 'kagoshima'],\n` +
+          `    ['tanegashima', 'amami'],\n` +
+          `    ['amami', 'shuri']\n` +
+          `];\n\n` +
+          `export const PROVINCE_DATA_BASE = [\n` + 
+          provinces.map(p => {
+              const originalCx = Math.round(p.cx / 2);
+              const originalCy = Math.round(p.cy / 2);
+              const neighborsStr = JSON.stringify(p.neighbors).replace(/"/g, "'");
+              
+              return `  { id: '${p.id}', name: '${p.name}', ownerId: '${p.ownerId}', troops: ${p.troops}, cx: ${originalCx}, cy: ${originalCy}, neighbors: ${neighborsStr}, commerce: ${p.commerce}, agriculture: ${p.agriculture}, defense: ${p.defense} },`;
+          }).join('\n') + 
+          `\n];`;
+      
+      const blob = new Blob([dataStr], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'provinces.js';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
   };
 
   const handleDomesticAction = (type, pid) => {
@@ -364,35 +419,73 @@ const App = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none text-stone-100 flex flex-col items-center justify-center bg-[#0f172a]">
-        <div className="absolute inset-0 z-0 bg-sky-900" style={{ backgroundImage: `radial-gradient(circle at 100% 50%, transparent 20%, rgba(255,255,255,0.03) 21%, transparent 22%), radial-gradient(circle at 0% 50%, transparent 20%, rgba(255,255,255,0.03) 21%, transparent 22%), radial-gradient(circle at 50% 50%, transparent 50%, rgba(0,0,0,0.2) 100%)`, backgroundSize: '100px 100px' }}><div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px)' }}></div></div>
+        
+        {/* 背景画像 */}
+        <div className="absolute inset-0 z-0">
+            <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-40" />
+            <div className="absolute inset-0 bg-sky-900/30 mix-blend-overlay"></div>
+        </div>
 
         <ResourceBar stats={daimyoStats[playerDaimyoId]} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
 
+        {/* 編集モード用ボタン (右上に配置) */}
+        <div className="absolute top-20 right-4 z-50 flex gap-2">
+            <button 
+                onClick={() => setIsEditMode(!isEditMode)} 
+                className={`px-3 py-1 rounded text-xs font-bold border ${isEditMode ? 'bg-yellow-600 border-yellow-400 text-black' : 'bg-stone-800 border-stone-600 text-white'}`}
+            >
+                {isEditMode ? '編集終了' : 'マップ編集'}
+            </button>
+            {isEditMode && (
+                <button 
+                    onClick={exportData} 
+                    className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white"
+                >
+                    データ出力(保存)
+                </button>
+            )}
+        </div>
+
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={(e) => { setDragStartPos({x:e.clientX, y:e.clientY}); setIsDragging(false); }}
-             onMouseMove={(e) => { if(e.buttons===1 && (Math.abs(e.clientX-dragStartPos.x)>5 || Math.abs(e.clientY-dragStartPos.y)>5)) { setIsDragging(true); setMapTransform(p => ({...p, x:p.x+e.movementX, y:p.y+e.movementY})); } }}
+             onMouseMove={handleGlobalMouseMove} 
+             onMouseUp={handleGlobalMouseUp}     
              onWheel={handleWheel}>
+            
             <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75">
-                <GameMap 
-                    provinces={provinces} viewingRelationId={viewingRelationId} playerDaimyoId={playerDaimyoId}
-                    alliances={alliances} ceasefires={ceasefires} coalition={coalition}
-                    selectedProvinceId={selectedProvinceId} attackSourceId={attackSourceId} transportSourceId={transportSourceId}
-                    onSelectProvince={handleMapSelect}
-                />
+                
+                {/* 背景画像のコンテナ (5600x8800) */}
+                <div className="absolute top-0 left-0 w-[5600px] h-[8800px] z-0 pointer-events-none">
+                    <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-50" />
+                </div>
+
+                <div className="relative z-10">
+                    <GameMap 
+                        provinces={provinces} viewingRelationId={viewingRelationId} playerDaimyoId={playerDaimyoId}
+                        alliances={alliances} ceasefires={ceasefires} coalition={coalition}
+                        selectedProvinceId={selectedProvinceId} attackSourceId={attackSourceId} transportSourceId={transportSourceId}
+                        onSelectProvince={handleMapSelect}
+                        isEditMode={isEditMode}
+                        onProvinceDragStart={handleProvinceDragStart}
+                    />
+                </div>
             </div>
         </div>
 
-        <ProvincePopup 
-            selectedProvince={selectedProvinceId ? provinces.find(p => p.id === selectedProvinceId) : null}
-            daimyoStats={daimyoStats} playerDaimyoId={playerDaimyoId} isPlayerTurn={isPlayerTurn} viewingRelationId={viewingRelationId}
-            shogunId={shogunId} alliances={alliances} ceasefires={ceasefires} coalition={coalition}
-            onClose={() => setSelectedProvinceId(null)}
-            onAction={(type, pid) => {
-                if (['develop','cultivate','pacify','fortify','market','trade','donate','titles'].includes(type)) handleDomesticAction(type, pid);
-                else if (['attack','transport','recruit','train'].includes(type)) handleMilitaryAction(type, pid);
-                else handleDiplomacy(type, provinces.find(p=>p.id===pid).ownerId);
-            }}
-        />
+        {/* 編集モード中はポップアップを出さない */}
+        {!isEditMode && (
+            <ProvincePopup 
+                selectedProvince={selectedProvinceId ? provinces.find(p => p.id === selectedProvinceId) : null}
+                daimyoStats={daimyoStats} playerDaimyoId={playerDaimyoId} isPlayerTurn={isPlayerTurn} viewingRelationId={viewingRelationId}
+                shogunId={shogunId} alliances={alliances} ceasefires={ceasefires} coalition={coalition}
+                onClose={() => setSelectedProvinceId(null)}
+                onAction={(type, pid) => {
+                    if (['develop','cultivate','pacify','fortify','market','trade','donate','titles'].includes(type)) handleDomesticAction(type, pid);
+                    else if (['attack','transport','recruit','train'].includes(type)) handleMilitaryAction(type, pid);
+                    else handleDiplomacy(type, provinces.find(p=>p.id===pid).ownerId);
+                }}
+            />
+        )}
 
         <ControlPanel 
             lastLog={lastLog} onHistoryClick={() => setModalState({type:'history'})} 
@@ -405,6 +498,7 @@ const App = () => {
 
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
+        {/* ▼ 修正: onFinish時のactionLeftリセットを削除 ▼ */}
         {modalState.type === 'battle' && <BattleScene battleData={modalState.data} onFinish={(res) => {
              const { attacker, defender, attackerAmount } = modalState.data;
              const { attackerRemaining, defenderRemaining } = res;
@@ -421,8 +515,9 @@ const App = () => {
                      else return { ...p, troops: defFinal };
                  }
                  if (p.id === attacker.id) {
-                     if (defenderRemaining <= 0) return { ...p, troops: p.troops + atkRecovered, actionsLeft: 0 };
-                     else return { ...p, troops: p.troops + atkReturning, actionsLeft: 0 };
+                     // 攻撃側は出陣時にAP消費済みのため、ここではactionsLeftを変更しない
+                     if (defenderRemaining <= 0) return { ...p, troops: p.troops + atkRecovered };
+                     else return { ...p, troops: p.troops + atkReturning };
                  }
                  return p;
              }));
@@ -432,6 +527,7 @@ const App = () => {
              else showLog(`${DAIMYO_INFO[attacker.ownerId].name}軍、${defender.name}を攻めきれず撤退（引き分け）。`);
              setModalState({ type: null }); 
         }} />}
+        {/* ▲ 修正ここまで ▲ */}
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={handleTroopAction} onCancel={() => setModalState({type: null})} />}
         {modalState.type === 'negotiate' && <NegotiationScene targetDaimyoId={modalState.data.targetId} targetDaimyo={DAIMYO_INFO[modalState.data.targetId]} isAllied={alliances[playerDaimyoId]?.includes(modalState.data.targetId)} onConfirm={(t) => {
             const p = provinces.find(x => x.id === modalState.data.provinceId);
