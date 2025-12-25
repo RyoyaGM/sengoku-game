@@ -1,12 +1,25 @@
 // src/data/provinces.js
 
 export const SEA_ROUTES = [
-    ['usukeshi', 'tsugaru'], ['awa_boso', 'misaki'],
+    ['usukeshi', 'tsugaru'], // 津軽海峡
+    ['sado', 'kasugayama'],  // 佐渡航路
+    ['oki', 'gassan-toda'],  // 隠岐航路
+    ['sumoto', 'hyogo'],     // 明石海峡
+    ['sumoto', 'tokushima'], // 鳴門海峡
+    ['imabari', 'fukuyama'], // しまなみ海道ルート
+    ['imabari', 'itsukushima'], // 瀬戸内海航路
+    ['imabari', 'funai'],    // 豊後水道
+    ['shimonoseki', 'kokura'], // 関門海峡
+    ['shimonoseki', 'hakata'], // 響灘・玄界灘航路
+    ['tsushima', 'iki'],     // 対馬海峡
+    ['iki', 'matsuura'],     // 壱岐水道
+    ['tanegashima', 'kagoshima'], // 大隅海峡
+    ['tanegashima', 'amami'], // トカラ列島航路
+    ['amami', 'shuri']       // 奄美・沖縄航路
 ];
 
 export const PROVINCE_DATA_BASE = [
   // --- 北海道 (蝦夷地) ---
-  // 座標調整: 久遠・松前(徳山)・宇須岸の間隔を拡大
   { id: 'matsumae', name: '徳山', ownerId: 'Kakizaki', troops: 300, cx: 1750, cy: 50, neighbors: ['usukeshi', 'kudo'], commerce: 40, agriculture: 20, defense: 50 },
   { id: 'usukeshi', name: '宇須岸', ownerId: 'Kono', troops: 200, cx: 1810, cy: 80, neighbors: ['matsumae', 'sannohe', 'tsugaru', 'ishikari'], commerce: 60, agriculture: 10, defense: 30 },
   { id: 'kudo', name: '久遠', ownerId: 'Kakizaki', troops: 200, cx: 1690, cy: 40, neighbors: ['matsumae'], commerce: 30, agriculture: 20, defense: 30 },
@@ -28,7 +41,6 @@ export const PROVINCE_DATA_BASE = [
   { id: 'shirakawa', name: '白河', ownerId: 'Yuki_S', troops: 400, cx: 1720, cy: 490, neighbors: ['nasu', 'aizu', 'iwaki', 'yonezawa'], commerce: 30, agriculture: 50, defense: 60 },
 
   // --- 関東 ---
-  // 座標調整: 那須・宇都宮を上下に分離
   { id: 'nasu', name: '那須', ownerId: 'Nasu', troops: 300, cx: 1690, cy: 500, neighbors: ['aizu', 'mito', 'utsunomiya', 'shirakawa'], commerce: 20, agriculture: 40, defense: 40 },
   { id: 'utsunomiya', name: '宇都宮', ownerId: 'Utsunomiya', troops: 400, cx: 1650, cy: 570, neighbors: ['nasu', 'mito', 'kawagoe', 'umayabashi'], commerce: 40, agriculture: 60, defense: 40 },
   { id: 'mito', name: '水戸', ownerId: 'Satake', troops: 600, cx: 1750, cy: 540, neighbors: ['iwaki', 'nasu', 'utsunomiya', 'kashima', 'sakura'], commerce: 50, agriculture: 70, defense: 50 },
@@ -43,7 +55,6 @@ export const PROVINCE_DATA_BASE = [
   { id: 'izu', name: '伊豆', ownerId: 'Hojo', troops: 400, cx: 1620, cy: 740, neighbors: ['odawara', 'sunpu'], commerce: 40, agriculture: 20, defense: 40 },
 
   // --- 中部・北陸 ---
-  // 座標調整: 敦賀・小浜・宮津の間隔を横に広げる
   { id: 'kasugayama', name: '春日山', ownerId: 'Uesugi', troops: 1100, cx: 1480, cy: 400, neighbors: ['shonai', 'kanbara', 'kawanakajima', 'etchu', 'umayabashi', 'sado'], commerce: 60, agriculture: 80, defense: 90 },
   { id: 'kanbara', name: '蒲原', ownerId: 'Uesugi', troops: 500, cx: 1550, cy: 380, neighbors: ['kasugayama', 'aizu'], commerce: 40, agriculture: 90, defense: 40 },
   { id: 'sado', name: '佐渡', ownerId: 'Honma', troops: 200, cx: 1450, cy: 330, neighbors: ['kasugayama'], commerce: 150, agriculture: 20, defense: 40 },
@@ -69,7 +80,6 @@ export const PROVINCE_DATA_BASE = [
   { id: 'gujo', name: '郡上', ownerId: 'Endo', troops: 300, cx: 1320, cy: 550, neighbors: ['inabayama', 'hida'], commerce: 20, agriculture: 20, defense: 60 },
 
   // --- 畿内 ---
-  // 座標調整: 堺・宮津の位置微調整
   { id: 'anotsu', name: '安濃津', ownerId: 'Kitabatake', troops: 600, cx: 1220, cy: 700, neighbors: ['kiyosu', 'azuchi', 'nara', 'shima'], commerce: 60, agriculture: 70, defense: 40 },
   { id: 'shima', name: '志摩', ownerId: 'Kuki', troops: 200, cx: 1240, cy: 750, neighbors: ['anotsu'], commerce: 50, agriculture: 10, defense: 30 },
   { id: 'odani', name: '小谷', ownerId: 'Azai', troops: 600, cx: 1180, cy: 540, neighbors: ['azuchi', 'ichijodani', 'tsuruga'], commerce: 40, agriculture: 60, defense: 80 },
@@ -86,7 +96,6 @@ export const PROVINCE_DATA_BASE = [
   { id: 'miyazu', name: '宮津', ownerId: 'Isshiki', troops: 300, cx: 1030, cy: 500, neighbors: ['obama', 'sasayama', 'toyooka'], commerce: 50, agriculture: 30, defense: 40 },
 
   // --- 中国 ---
-  // 座標調整: 吉田・神辺の分離、津山の位置下げ
   { id: 'himeji', name: '姫路', ownerId: 'Akamatsu', troops: 500, cx: 940, cy: 640, neighbors: ['hyogo', 'sasayama', 'okayama', 'tottori', 'toyooka', 'tsuyama'], commerce: 70, agriculture: 80, defense: 50 },
   { id: 'toyooka', name: '豊岡', ownerId: 'Yamana', troops: 400, cx: 970, cy: 520, neighbors: ['miyazu', 'tottori', 'himeji'], commerce: 30, agriculture: 40, defense: 50 },
   { id: 'tottori', name: '鳥取', ownerId: 'Yamana', troops: 400, cx: 880, cy: 540, neighbors: ['toyooka', 'himeji', 'gassan-toda', 'tsuyama'], commerce: 40, agriculture: 40, defense: 40 },
@@ -111,7 +120,6 @@ export const PROVINCE_DATA_BASE = [
   { id: 'shimanto', name: '四万十', ownerId: 'Ichijo', troops: 400, cx: 750, cy: 850, neighbors: ['kochi', 'imabari'], commerce: 40, agriculture: 40, defense: 30 },
 
   // --- 九州・沖縄 ---
-  // 座標調整: 門司を左に移動
   { id: 'hakata', name: '博多', ownerId: 'Otomo', troops: 800, cx: 380, cy: 660, neighbors: ['shimonoseki', 'funai', 'saga', 'kokura'], commerce: 180, agriculture: 60, defense: 50 },
   { id: 'kokura', name: '門司', ownerId: 'Otomo', troops: 500, cx: 440, cy: 670, neighbors: ['hakata', 'funai', 'shimonoseki'], commerce: 70, agriculture: 50, defense: 60 },
   { id: 'funai', name: '府内', ownerId: 'Otomo', troops: 1200, cx: 480, cy: 750, neighbors: ['hakata', 'kokura', 'asou', 'usuki', 'imabari'], commerce: 110, agriculture: 70, defense: 70 },
