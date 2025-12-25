@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
 import { COSTS } from './data/constants';
+import { HISTORICAL_EVENTS } from './data/events';
 import { getFormattedDate, getRiceMarketPrice } from './utils/helpers';
 import { 
   INITIAL_RESOURCES, 
@@ -18,7 +19,7 @@ import { GameMap, ProvincePopup } from './components/MapComponents';
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
-  TroopSelector, BattleScene, GameOverScreen 
+  TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal 
 } from './components/Modals';
 
 // --- Main App Component ---
@@ -74,7 +75,16 @@ const App = () => {
   useEffect(() => { if (playerDaimyoId && turnOrder.length === 0) startNewSeason(); }, [playerDaimyoId]);
   
   useEffect(() => {
-      if (turn > 1) { showLog(`${getFormattedDate(turn)}になりました。`); startNewSeason(); }
+      if (turn > 1) { 
+          showLog(`${getFormattedDate(turn)}になりました。`); 
+          
+          const occurredEvent = HISTORICAL_EVENTS.find(e => e.trigger(turn, provincesRef.current, daimyoStats));
+          if (occurredEvent) {
+              setModalState({ type: 'historical_event', data: occurredEvent });
+          } else {
+              startNewSeason();
+          }
+      }
   }, [turn]);
 
   useEffect(() => {
@@ -86,7 +96,8 @@ const App = () => {
       if (currentDaimyo === playerDaimyoId) {
           setIsPlayerTurn(true); showLog(`我が軍の手番です。`);
       } else {
-          setIsPlayerTurn(false); setTimeout(() => processAiTurn(currentDaimyo), 800);
+          // ▼ 変更: AIターンの開始待ち時間を短縮 (800ms -> 200ms)
+          setIsPlayerTurn(false); setTimeout(() => processAiTurn(currentDaimyo), 200);
       }
   }, [currentTurnIndex, turnOrder]);
 
@@ -98,6 +109,41 @@ const App = () => {
   };
   const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
   const consumeAction = (pid) => setProvinces(prev => prev.map(p => p.id === pid ? { ...p, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
+  
+  const getPlayerActionSource = () => provinces.find(p => p.ownerId === playerDaimyoId && p.actionsLeft > 0);
+
+  const handleEventDecision = (event, choice) => {
+      setModalState({ type: null });
+
+      const context = {
+          setProvinces,
+          updateResource,
+          showLog,
+          setRelations,
+          setDaimyoStats,
+          setAlliances,
+          setCeasefires
+      };
+
+      let nextEvent = null;
+
+      if (choice) {
+          if (choice.resolve) {
+              nextEvent = choice.resolve(context);
+          }
+      } else {
+          if (event.defaultResolve) {
+              nextEvent = event.defaultResolve(context);
+          }
+      }
+
+      if (nextEvent) {
+          setModalState({ type: 'historical_event', data: nextEvent });
+      } else {
+          setModalState({ type: null });
+          startNewSeason();
+      }
+  };
 
   const startNewSeason = () => {
       const isAutumn = (turn - 1) % 4 === 2;
@@ -119,7 +165,8 @@ const App = () => {
               updateResource(id, commerceIncome, agIncome);
           }
       });
-      setTimeout(determineTurnOrder, 500);
+      // ▼ 変更: 季節開始時のターン順決定待ち時間を短縮 (500ms -> 200ms)
+      setTimeout(determineTurnOrder, 200);
   };
 
   const determineTurnOrder = () => {
@@ -144,9 +191,10 @@ const App = () => {
           const params = {
               aggressive: { attackChance: 0.8, recruitThreshold: 400, safetyMargin: 0.4, goldReserve: 300, riceReserve: 300 },
               balanced:   { attackChance: 0.5, recruitThreshold: 500, safetyMargin: 0.8, goldReserve: 1000, riceReserve: 1000 },
-              defensive:  { attackChance: 0.2, recruitThreshold: 700, safetyMargin: 1.2, goldReserve: 2000, riceReserve: 2000 }
+              defensive:  { attackChance: 0.2, recruitThreshold: 700, safetyMargin: 1.2, goldReserve: 2000, riceReserve: 2000 },
+              ainu:       { attackChance: 0.0, recruitThreshold: 800, safetyMargin: 1.5, goldReserve: 3000, riceReserve: 3000 }
           };
-          const prm = params[strategy];
+          const prm = params[strategy] || params.balanced;
 
           const marketPrice = getRiceMarketPrice(turn);
           if (gold > prm.goldReserve * 1.5 && rice < prm.riceReserve) {
@@ -158,6 +206,39 @@ const App = () => {
               const sellAmount = 200;
               const gain = Math.floor(sellAmount * marketPrice * 0.8);
               rice -= sellAmount; gold += gain;
+          }
+
+          if (aiId === 'Ainu' && Math.random() < 0.25) { 
+             const myProv = next.filter(p => p.ownerId === aiId);
+             const neighbors = [...new Set(myProv.flatMap(p => p.neighbors))].map(nid => next.find(x => x.id === nid)).filter(n => n && n.ownerId !== aiId);
+             if (neighbors.length > 0) {
+                 const target = neighbors[Math.floor(Math.random() * neighbors.length)];
+                 const targetId = target.ownerId;
+                 const isUnreasonable = Math.random() < 0.5;
+
+                 if (targetId === playerDaimyoId) {
+                     if (isUnreasonable) {
+                         setTimeout(() => setModalState({ type: 'incoming_request', data: { sourceId: 'Ainu', type: 'ainu_demand' } }), 500);
+                     } else {
+                         setTimeout(() => setModalState({ type: 'incoming_request', data: { sourceId: 'Ainu', type: 'ainu_trade' } }), 500);
+                     }
+                 } else {
+                     if (isUnreasonable) {
+                         setRelations(prev => ({
+                             ...prev,
+                             [aiId]: { ...prev[aiId], [targetId]: Math.max(0, (prev[aiId]?.[targetId]||50) - 20) },
+                             [targetId]: { ...prev[targetId], [aiId]: Math.max(0, (prev[targetId]?.[aiId]||50) - 20) }
+                         }));
+                         showLog(`アイヌが${DAIMYO_INFO[targetId].name}へ圧力をかけ、関係が悪化しました。`);
+                     } else {
+                         setRelations(prev => ({
+                             ...prev,
+                             [aiId]: { ...prev[aiId], [targetId]: Math.min(100, (prev[aiId]?.[targetId]||50) + 10) },
+                             [targetId]: { ...prev[targetId], [aiId]: Math.min(100, (prev[targetId]?.[aiId]||50) + 10) }
+                         }));
+                     }
+                 }
+             }
           }
 
           const myProvinces = next.filter(p => p.ownerId === aiId);
@@ -187,7 +268,13 @@ const App = () => {
                       continue;
                   }
 
-                  if (weakEnemy && rice >= COSTS.attack.rice + prm.riceReserve && attackForce > 100 && Math.random() < prm.attackChance) {
+                  let canAttack = true;
+                  if (aiId === 'Ainu' && weakEnemy) {
+                      const rel = relations[aiId]?.[weakEnemy.ownerId] ?? 50;
+                      if (rel > 20) canAttack = false;
+                  }
+
+                  if (weakEnemy && rice >= COSTS.attack.rice + prm.riceReserve && attackForce > 100 && Math.random() < prm.attackChance && canAttack) {
                       rice -= COSTS.attack.rice;
                       p.actionsLeft--;
                       let atk = attackForce; 
@@ -235,7 +322,8 @@ const App = () => {
           setTimeout(() => updateResource(aiId, gold - originalGold, rice - originalRice, fame - originalFame), 0);
           return next;
       });
-      setTimeout(advanceTurn, 800);
+      // ▼ 変更: AI行動終了後の待機時間を短縮 (800ms -> 200ms)
+      setTimeout(advanceTurn, 200);
   };
 
   const handleWheel = (e) => {
@@ -247,7 +335,6 @@ const App = () => {
     setMapTransform({ x: newX, y: newY, scale: newScale });
   };
 
-  // 編集モード用のハンドラ
   const handleProvinceDragStart = (pid, e) => {
       setDraggingProvinceId(pid);
   };
@@ -276,7 +363,6 @@ const App = () => {
       setIsDragging(false);
   };
 
-  // データ出力機能
   const exportData = () => {
       const dataStr = `export const SEA_ROUTES = [\n` +
           `    ['usukeshi', 'tsugaru'],\n` +
@@ -360,7 +446,13 @@ const App = () => {
            setProvinces(prev => prev.map(pr => pr.id === pid ? {...pr, troops: pr.troops + c.troops, loyalty: pr.loyalty - 5} : pr));
            consumeAction(pid); showLog("徴兵完了");
       }
-      if (type === 'attack') { setAttackSourceId(pid); setTransportSourceId(null); setSelectedProvinceId(null); showLog("攻撃目標を選択してください"); }
+      if (type === 'attack') { 
+          if (playerDaimyoId === 'Ainu') {
+             setAttackSourceId(pid); setTransportSourceId(null); setSelectedProvinceId(null); showLog("攻撃目標を選択してください"); 
+          } else {
+             setAttackSourceId(pid); setTransportSourceId(null); setSelectedProvinceId(null); showLog("攻撃目標を選択してください"); 
+          }
+      }
       if (type === 'transport') { setTransportSourceId(pid); setAttackSourceId(null); setSelectedProvinceId(null); showLog("輸送先を選択してください"); }
   };
 
@@ -392,6 +484,17 @@ const App = () => {
           const type = isTargetable ? 'attack' : 'transport';
           const srcId = isTargetable ? attackSourceId : transportSourceId;
           const src = provinces.find(p => p.id === srcId);
+
+          if (type === 'attack' && playerDaimyoId === 'Ainu') {
+              const targetProv = provinces.find(p => p.id === pid);
+              const rel = relations[playerDaimyoId]?.[targetProv.ownerId] ?? 50;
+              if (rel > 20) {
+                  showLog("関係が悪化していないため攻撃の大義名分がありません(必要関係値:20以下)");
+                  setAttackSourceId(null);
+                  return;
+              }
+          }
+
           setModalState({ type: 'troop', data: { type, sourceId: srcId, targetId: pid, maxTroops: src.troops } });
       } else {
           if (!attackSourceId && !transportSourceId) setSelectedProvinceId(pid === selectedProvinceId ? null : pid);
@@ -399,32 +502,30 @@ const App = () => {
   };
 
   const handleDiplomacy = (type, targetDaimyoId) => {
-      const p = provinces.find(x => x.id === selectedProvinceId);
-      if (p && p.actionsLeft <= 0) return showLog("行動力不足"); 
+      const playerSource = getPlayerActionSource();
+      if (!playerSource) return showLog("行動可能な自国拠点がありません"); 
 
       if (type === 'alliance') {
          const cost = 500;
          if (daimyoStats[playerDaimyoId].gold < cost) return showLog("金不足");
          updateResource(playerDaimyoId, -cost, 0);
          setAlliances(prev => ({...prev, [playerDaimyoId]: [...(prev[playerDaimyoId]||[]), targetDaimyoId], [targetDaimyoId]: [...(prev[targetDaimyoId]||[]), playerDaimyoId]}));
-         showLog("同盟締結"); consumeAction(selectedProvinceId);
+         showLog("同盟締結"); consumeAction(playerSource.id);
       }
       if (type === 'negotiate') {
-          setModalState({ type: 'negotiate', data: { targetId: targetDaimyoId, provinceId: selectedProvinceId } });
+          setModalState({ type: 'negotiate', data: { targetId: targetDaimyoId, provinceId: playerSource.id } }); 
       }
   };
 
-  // 5. Render
   if (!playerDaimyoId) return <StartScreen onSelectDaimyo={setPlayerDaimyoId} />;
+
+  const currentDaimyoId = turnOrder[currentTurnIndex];
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none text-stone-100 flex flex-col items-center justify-center bg-[#0f172a]">
         
-        {/* ▼ 修正: 背景の固定画像(二重表示の原因)を削除しました ▼ */}
-        
         <ResourceBar stats={daimyoStats[playerDaimyoId]} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
 
-        {/* 編集モード用ボタン (右上に配置) */}
         <div className="absolute top-20 right-4 z-50 flex gap-2">
             <button 
                 onClick={() => setIsEditMode(!isEditMode)} 
@@ -450,7 +551,6 @@ const App = () => {
             
             <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75">
                 
-                {/* 背景画像のコンテナ (5600x8800) */}
                 <div className="absolute top-0 left-0 w-[5600px] h-[8800px] z-0 pointer-events-none">
                     <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-50" />
                 </div>
@@ -468,7 +568,6 @@ const App = () => {
             </div>
         </div>
 
-        {/* 編集モード中はポップアップを出さない */}
         {!isEditMode && (
             <ProvincePopup 
                 selectedProvince={selectedProvinceId ? provinces.find(p => p.id === selectedProvinceId) : null}
@@ -490,7 +589,52 @@ const App = () => {
             isPlayerTurn={isPlayerTurn} hasSelection={attackSourceId || transportSourceId}
             onViewBack={() => setViewingRelationId(null)} viewingRelationId={viewingRelationId}
             onDaimyoList={() => setModalState({type: 'list'})}
+            currentDaimyoId={currentDaimyoId}
         />
+        
+        {modalState.type === 'incoming_request' && <IncomingRequestModal request={modalState.data} 
+            onAccept={() => {
+                if (modalState.data.type === 'ainu_demand') {
+                    const cost = 1000;
+                    if (daimyoStats[playerDaimyoId].gold >= cost && daimyoStats[playerDaimyoId].rice >= cost) {
+                        updateResource(playerDaimyoId, -cost, -cost);
+                        updateRelation('Ainu', 10);
+                        showLog("アイヌの要求を受け入れました。");
+                    } else {
+                        showLog("要求された物資が足りません...関係が悪化しました。");
+                        updateRelation('Ainu', -30);
+                    }
+                }
+                if (modalState.data.type === 'ainu_trade') {
+                    if (daimyoStats[playerDaimyoId].gold >= 500) {
+                        updateResource(playerDaimyoId, -500, 500);
+                        updateRelation('Ainu', 10);
+                        showLog("交易成立：金500を支払い、兵糧500を得ました。");
+                    } else {
+                        showLog("資金が不足しています。");
+                    }
+                }
+                setModalState({type:null});
+            }}
+            onReject={() => {
+                if (modalState.data.type === 'ainu_demand') {
+                    showLog("アイヌの要求を拒否しました。関係が極端に悪化しました！");
+                    updateRelation('Ainu', -50);
+                }
+                if (modalState.data.type === 'ainu_trade') {
+                    showLog("交易の申し出を断りました。");
+                }
+                setModalState({type:null});
+            }}
+        />}
+
+        {modalState.type === 'historical_event' && (
+             <HistoricalEventModal 
+               event={modalState.data} 
+               daimyoId={playerDaimyoId} 
+               onSelect={(choice) => handleEventDecision(modalState.data, choice)} 
+             />
+        )}
 
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
@@ -510,7 +654,6 @@ const App = () => {
                      else return { ...p, troops: defFinal };
                  }
                  if (p.id === attacker.id) {
-                     // 攻撃側は出陣時にAP消費済みのため、ここではactionsLeftを変更しない
                      if (defenderRemaining <= 0) return { ...p, troops: p.troops + atkRecovered };
                      else return { ...p, troops: p.troops + atkReturning };
                  }
@@ -523,7 +666,10 @@ const App = () => {
              setModalState({ type: null }); 
         }} />}
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={handleTroopAction} onCancel={() => setModalState({type: null})} />}
-        {modalState.type === 'negotiate' && <NegotiationScene targetDaimyoId={modalState.data.targetId} targetDaimyo={DAIMYO_INFO[modalState.data.targetId]} isAllied={alliances[playerDaimyoId]?.includes(modalState.data.targetId)} onConfirm={(t) => {
+        
+        {modalState.type === 'negotiate' && <NegotiationScene targetDaimyoId={modalState.data.targetId} targetDaimyo={DAIMYO_INFO[modalState.data.targetId]} isAllied={alliances[playerDaimyoId]?.includes(modalState.data.targetId)} 
+            isPlayerAinu={playerDaimyoId === 'Ainu'}
+            onConfirm={(t) => {
             const p = provinces.find(x => x.id === modalState.data.provinceId);
             if (p.actionsLeft <= 0) { showLog("行動力不足"); return; }
             consumeAction(modalState.data.provinceId); 
@@ -531,6 +677,16 @@ const App = () => {
             if(t==='gift') { updateResource(playerDaimyoId, -COSTS.gift.gold, 0); updateRelation(modalState.data.targetId, 10); showLog("贈答を行いました"); }
             if(t==='ceasefire') { updateResource(playerDaimyoId, -300, 0); setCeasefires(prev => ({...prev, [playerDaimyoId]: {...prev[playerDaimyoId], [modalState.data.targetId]: 5}})); showLog("停戦成立"); }
             if(t==='threaten') { showLog("脅迫しました..."); updateRelation(modalState.data.targetId, -20); }
+            if(t==='ainu_demand') { 
+                showLog("理不尽な圧力をかけました。"); 
+                updateRelation(modalState.data.targetId, -30);
+                if (Math.random() > 0.4) {
+                    showLog("相手は要求を呑みました。(金・兵糧獲得)");
+                    updateResource(playerDaimyoId, 1000, 1000);
+                } else {
+                    showLog("相手は激怒し、要求を拒否しました。");
+                }
+            }
             if(t==='surrender') { showLog("勧告しました..."); }
             if(t==='request_aid') { showLog("援助を要請しました"); }
             if(t==='break_alliance') { showLog("同盟を破棄しました"); setAlliances(prev => ({...prev, [playerDaimyoId]: prev[playerDaimyoId].filter(id => id !== modalState.data.targetId), [modalState.data.targetId]: prev[modalState.data.targetId].filter(id => id !== playerDaimyoId)})); }

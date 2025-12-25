@@ -26,7 +26,8 @@ export const DAIMYO_INFO = {
   // --- その他大名 ---
   Ashikaga: { name: '足利', color: 'bg-slate-800', fill: '#1e293b', text: 'text-white', difficulty: '難', strategy: 'defensive' },
   Kakizaki: { name: '蠣崎', color: 'bg-teal-700', fill: '#0f766e', text: 'text-white', difficulty: '難', strategy: 'defensive' },
-  Ainu: { name: 'アイヌ', color: 'bg-stone-500', fill: '#78716c', text: 'text-white', difficulty: '難', strategy: 'defensive' },
+  // ▼ 変更: アイヌを特殊戦略に変更
+  Ainu: { name: 'アイヌ', color: 'bg-stone-500', fill: '#78716c', text: 'text-white', difficulty: '特殊', strategy: 'ainu' },
   Nanbu: { name: '南部', color: 'bg-indigo-300', fill: '#a5b4fc', text: 'text-black', difficulty: '中', strategy: 'balanced' },
   Ando: { name: '安東', color: 'bg-cyan-800', fill: '#155e75', text: 'text-white', difficulty: '中', strategy: 'balanced' },
   Onodera: { name: '小野寺', color: 'bg-stone-600', fill: '#57534e', text: 'text-white', difficulty: '難', strategy: 'defensive' },
@@ -36,11 +37,9 @@ export const DAIMYO_INFO = {
   Iwaki: { name: '岩城', color: 'bg-orange-400', fill: '#fb923c', text: 'text-black', difficulty: '難', strategy: 'defensive' },
   Yuki_S: { name: '白河結城', color: 'bg-stone-400', fill: '#a8a29e', text: 'text-black', difficulty: '難', strategy: 'defensive' },
   
-  // ▼ 追加: 不足していた大名データ
   Kasai: { name: '葛西', color: 'bg-emerald-500', fill: '#10b981', text: 'text-black', difficulty: '難', strategy: 'defensive' },
   Soma: { name: '相馬', color: 'bg-yellow-600', fill: '#ca8a04', text: 'text-white', difficulty: '難', strategy: 'balanced' },
   Bessho: { name: '別所', color: 'bg-red-400', fill: '#f87171', text: 'text-black', difficulty: '難', strategy: 'defensive' },
-  // ▲ 追加ここまで
 
   Nasu: { name: '那須', color: 'bg-amber-200', fill: '#fde68a', text: 'text-black', difficulty: '難', strategy: 'defensive' },
   Utsunomiya: { name: '宇都宮', color: 'bg-amber-600', fill: '#d97706', text: 'text-white', difficulty: '難', strategy: 'defensive' },
@@ -53,7 +52,7 @@ export const DAIMYO_INFO = {
   Hatakeyama: { name: '畠山', color: 'bg-sky-600', fill: '#0284c7', text: 'text-white', difficulty: '難', strategy: 'defensive' },
   Takeda_W: { name: '若狭武田', color: 'bg-orange-300', fill: '#fdba74', text: 'text-black', difficulty: '難', strategy: 'defensive' },
   Anegakoji: { name: '姉小路', color: 'bg-pink-300', fill: '#f9a8d4', text: 'text-black', difficulty: '難', strategy: 'defensive' },
-  Kiso: { name: '木曽', color: 'bg-stone-500', fill: '#57534e', text: 'text-white', difficulty: '難', strategy: 'defensive' }, // マップからは消えるがデータとして残しておいて無害
+  Kiso: { name: '木曽', color: 'bg-stone-500', fill: '#57534e', text: 'text-white', difficulty: '難', strategy: 'defensive' },
 
   Mizuno: { name: '水野', color: 'bg-cyan-600', fill: '#0891b2', text: 'text-white', difficulty: '難', strategy: 'defensive' },
   Saito: { name: '斎藤', color: 'bg-lime-600', fill: '#65a30d', text: 'text-white', difficulty: '難', strategy: 'defensive' },
@@ -90,7 +89,6 @@ export const DAIMYO_INFO = {
   Minor: { name: '諸勢力', color: 'bg-stone-300', fill: '#d6d3d1', text: 'text-black', difficulty: '-', strategy: 'defensive' },
 };
 
-// ... (TITLES, COURT_RANKS, HISTORICAL_FAME は省略) ...
 export const TITLES = [
   { id: 'shogun', name: '征夷大将軍', fameBonus: 300, reqProvinces: 15, reqRegion: ['kyoto'], reqDonation: 5000 },
   { id: 'kanrei', name: '管領', fameBonus: 100, reqProvinces: 5, reqRegion: ['kyoto', 'ishiyama', 'azuchi'], reqDonation: 2000 },
@@ -102,7 +100,7 @@ export const TITLES = [
 
 export const COURT_RANKS = [
   { id: 'jugoi_ge', name: '従五位下', fameBonus: 10, reqProvinces: 2, reqDonation: 1000, waiverDonation: 5000 },
-  { id: 'jugoi_jo', name: '従五位上', fameBonus: 20, reqProvinces: 4, reqDonation: 3000, waiverDonation: 10000 },
+  { id: 'jugoi_jo', name: '従五位上', fameBonus: 40, reqProvinces: 4, reqDonation: 3000, waiverDonation: 10000 },
   { id: 'jushii_ge', name: '従四位下', fameBonus: 40, reqProvinces: 8, reqDonation: 8000, waiverDonation: 20000 },
   { id: 'jushii_jo', name: '従四位上', fameBonus: 60, reqProvinces: 12, reqDonation: 15000, waiverDonation: 35000 },
   { id: 'jusanmi', name: '従三位', fameBonus: 80, reqProvinces: 16, reqDonation: 25000, waiverDonation: 50000 },
