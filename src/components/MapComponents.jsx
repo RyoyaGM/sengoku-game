@@ -1,10 +1,10 @@
+// src/components/MapComponents.jsx
 import React, { useState } from 'react';
-import { Coins, Wheat, Crown, Zap } from 'lucide-react';
+import { Coins, Wheat, Crown, Zap, Skull } from 'lucide-react'; 
 import { DAIMYO_INFO } from '../data/daimyos';
 import { SEA_ROUTES } from '../data/provinces';
 import { COSTS } from '../data/constants';
 
-// ▼▼▼ GameMapコンポーネント ▼▼▼
 export const GameMap = ({ 
     provinces, viewingRelationId, playerDaimyoId, 
     alliances, ceasefires, coalition, 
@@ -59,7 +59,6 @@ export const GameMap = ({
                 return (
                     <g 
                         key={p.id} 
-                        // ▼ 修正: isEditModeでもクリックイベントを発火させるように変更
                         onClick={() => onSelectProvince(p.id, isTargetable, isTransportTarget)} 
                         onMouseDown={(e) => {
                             if (isEditMode) {
@@ -92,13 +91,11 @@ export const GameMap = ({
     );
 };
 
-// ▼ 修正: isEditModeを受け取るように追加
 export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, isPlayerTurn, viewingRelationId, shogunId, alliances, ceasefires, coalition, onClose, onAction, isEditMode }) => {
     if (!selectedProvince) return null;
     const p = selectedProvince;
     const isOwned = p.ownerId === playerDaimyoId;
     const daimyo = DAIMYO_INFO[p.ownerId] || { name: '不明', color: 'bg-gray-500' };
-    const stats = daimyoStats[p.ownerId];
     const [tab, setTab] = useState('military');
 
     const canInteract = !viewingRelationId && isPlayerTurn;
@@ -120,26 +117,19 @@ export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, i
                 <button onClick={onClose} className="text-stone-400 hover:text-white">✕</button>
             </div>
             
-            {/* ▼ 修正: 編集モード用のUIを追加 */}
             {isEditMode ? (
                 <div className="mb-4 bg-stone-900 p-2 rounded border border-yellow-600">
                     <div className="text-yellow-400 font-bold text-sm mb-1">【編集】所属大名の変更</div>
-                    <select 
-                        className="w-full bg-stone-800 text-white border border-stone-600 rounded p-1"
-                        value={p.ownerId}
-                        onChange={(e) => onAction('change_owner', p.id, e.target.value)}
-                    >
-                        {Object.keys(DAIMYO_INFO).map(id => (
-                            <option key={id} value={id}>{DAIMYO_INFO[id].name}</option>
-                        ))}
+                    <select className="w-full bg-stone-800 text-white border border-stone-600 rounded p-1" value={p.ownerId} onChange={(e) => onAction('change_owner', p.id, e.target.value)}>
+                        {Object.keys(DAIMYO_INFO).map(id => (<option key={id} value={id}>{DAIMYO_INFO[id].name}</option>))}
                     </select>
                 </div>
             ) : (
                 <>
                     <div className="grid grid-cols-3 gap-1 mb-2 text-xs bg-black/30 p-2 rounded">
-                        <div className="flex items-center gap-1 text-yellow-300"><Coins size={10}/>{stats.gold}</div>
-                        <div className="flex items-center gap-1 text-green-300"><Wheat size={10}/>{stats.rice}</div>
-                        <div className="flex items-center gap-1 text-purple-300"><Crown size={10}/>{stats.fame}</div>
+                        <div className="flex items-center gap-1 text-yellow-300" title="拠点の軍資金"><Coins size={10}/>{p.gold}</div>
+                        <div className="flex items-center gap-1 text-green-300" title="拠点の兵糧"><Wheat size={10}/>{p.rice}</div>
+                        <div className="flex items-center gap-1 text-purple-300" title="大名の名声"><Crown size={10}/>{daimyoStats[p.ownerId]?.fame}</div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs mb-4">
                         <div>兵数: {p.troops}</div><div>防御: {p.defense}</div>
@@ -161,11 +151,12 @@ export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, i
                                 <div className="grid grid-cols-2 gap-2">
                                     {tab === 'military' && (
                                         <>
-                                        <button onClick={() => onAction('attack', p.id)} className="cmd-btn relative col-span-2 bg-red-900/50 border-red-700 text-red-100">出陣 <span className="text-[10px] ml-1">({COSTS.attack.gold}/{COSTS.attack.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('attack', p.id)} className="cmd-btn relative col-span-2 bg-red-900/50 border-red-700 text-red-100">出陣 <span className="text-[10px] ml-1">({COSTS.attack.gold}/{COSTS.attack.rice} +携行)</span><CostBadge/></button>
                                         <button onClick={() => onAction('transport', p.id)} className="cmd-btn relative col-span-2 bg-blue-900/50 border-blue-700 text-blue-100">輸送 <span className="text-[10px] ml-1">({COSTS.move.gold}/{COSTS.move.rice})</span><CostBadge/></button>
                                         <button onClick={() => onAction('recruit', p.id)} className="cmd-btn relative bg-blue-900/50 border-blue-700 text-blue-100">徴兵 <span className="text-[10px] ml-1">({COSTS.recruit.gold}/{COSTS.recruit.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('forced_recruit', p.id)} className="cmd-btn relative bg-red-950/80 border-red-800 text-red-500 font-bold flex items-center justify-center gap-1"><Skull size={12}/>強制徴兵 <CostBadge/></button>
                                         <button onClick={() => onAction('train', p.id)} className="cmd-btn relative bg-orange-900/50 border-orange-700 text-orange-100">訓練 <span className="text-[10px] ml-1">({COSTS.train.gold})</span><CostBadge/></button>
-                                        <button onClick={() => onAction('fortify', p.id)} className="cmd-btn relative bg-stone-700 border-stone-500 text-stone-100 col-span-2">普請 <span className="text-[10px] ml-1">({COSTS.fortify.gold})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('fortify', p.id)} className="cmd-btn relative bg-stone-700 border-stone-500 text-stone-100 ">普請 <span className="text-[10px] ml-1">({COSTS.fortify.gold})</span><CostBadge/></button>
                                         </>
                                     )}
                                     {tab === 'domestic' && (
@@ -173,23 +164,18 @@ export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, i
                                         <button onClick={() => onAction('develop', p.id)} className="cmd-btn relative bg-yellow-900/50 border-yellow-700 text-yellow-100">商業 <span className="text-[10px] ml-1">({COSTS.develop.gold})</span><CostBadge/></button>
                                         <button onClick={() => onAction('cultivate', p.id)} className="cmd-btn relative bg-green-900/50 border-green-700 text-green-100">開墾 <span className="text-[10px] ml-1">({COSTS.cultivate.gold}/{COSTS.cultivate.rice})</span><CostBadge/></button>
                                         <button onClick={() => onAction('pacify', p.id)} className="cmd-btn relative bg-pink-900/50 border-pink-700 text-pink-100 col-span-2">施し <span className="text-[10px] ml-1">({COSTS.pacify.gold}/{COSTS.pacify.rice})</span><CostBadge/></button>
-                                        <button onClick={() => onAction('market', p.id)} className="cmd-btn relative bg-orange-700 border-orange-500 text-white col-span-2">楽市楽座 <span className="text-[9px] ml-1 opacity-80">(FREE)</span></button>
+                                        <button onClick={() => onAction('market', p.id)} className="cmd-btn relative bg-orange-700 border-orange-500 text-white col-span-2">楽市楽座(米売却) <span className="text-[9px] ml-1 opacity-80">(FREE)</span></button>
                                         <button onClick={() => onAction('trade', p.id)} className="cmd-btn relative bg-teal-800 border-teal-500 text-white col-span-2">貿易 <span className="text-[10px] ml-1">({COSTS.trade.gold})</span><CostBadge/></button>
                                         </>
                                     )}
                                     {tab === 'fame' && (
-                                        <>
-                                        <button onClick={() => onAction('donate', p.id)} className="cmd-btn relative bg-purple-900/60 border-purple-600 text-purple-100 col-span-2 py-3">献金<CostBadge/></button>
-                                        <button onClick={() => onAction('titles', p.id)} className="cmd-btn relative bg-yellow-600 border-yellow-300 text-black font-bold col-span-2 py-3">役職・官位 <span className="text-[9px] opacity-70 block font-normal">(確認無料/申請時消費)</span></button>
-                                        </>
+                                        <div className="col-span-2 text-center text-xs text-gray-400">名声コマンドは調整中です</div>
                                     )}
                                 </div>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
-                                {!isAllied && !isCeasefire && <button onClick={() => onAction('alliance', p.id)} className="cmd-btn relative bg-indigo-700 border-indigo-500 text-white h-10">同盟申請 <span className="text-[10px] ml-1">(500)</span><CostBadge/></button>}
-                                {!isCeasefire && <button onClick={() => onAction('negotiate', p.id)} className="cmd-btn relative bg-pink-800 border-pink-500 text-white h-10">{isAllied ? '外交' : '交渉'}<CostBadge/></button>}
-                                {isCeasefire && <div className="text-center text-green-300 bg-green-900/30 border border-green-700 p-2 rounded">停戦中</div>}
+                                <div className="text-center text-gray-400 text-xs">他国領地への干渉は現在制限されています</div>
                             </div>
                         )
                     ) : (
