@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { DAIMYO_INFO } from '../data/daimyos';
 import { HISTORICAL_EVENTS } from '../data/events';
-import { getFormattedDate } from '../utils/helpers';
+import { getFormattedDate, getSeason } from '../utils/helpers';
 
 export const useGameLoop = ({
     provincesRef,
@@ -75,8 +75,8 @@ export const useGameLoop = ({
     const startNewSeason = () => {
         checkElimination();
 
-        const seasonIndex = (turn - 1) % 4; // 0:春, 1:夏, 2:秋, 3:冬
-        const isAutumn = seasonIndex === 2;
+        const season = getSeason(turn);
+        const isAutumn = season === 'autumn';
         
         setCeasefires(prev => {
             const next = { ...prev };
@@ -93,67 +93,81 @@ export const useGameLoop = ({
             }
         }
 
-        // --- ダメージリセット用のマップ作成準備 ---
-        // 収入計算後に battleDamage をクリアするため、ここでは計算ロジック内で参照する
-        
-        setProvinces(curr => {
-            // アクション回復 & ダメージリセット（収入計算前にダメージ情報は取得したいので、ここではリセット予約）
-            // 実際は updateResource で計算するので、ここでは actionsLeft の回復とダメージ情報の消去を行う
-            // ただし、updateResourceは非同期ではないが、setProvinces内で行うのは不適切。
-            // 先に計算してから setProvinces で消去する流れにする。
-            
-            // ここでは一旦そのまま返す(actionsLeftのみ更新)、計算は下で行う
-            return curr.map(p => ({ ...p, actionsLeft: 3 }));
-        });
+        // --- 収入・維持費計算 (拠点独立採算) ---
+        setProvinces(curr => curr.map(p => {
+            const daimyoId = p.ownerId;
+            const daimyo = DAIMYO_INFO[daimyoId];
+            const system = daimyo?.militarySystem || 'standard';
 
-        // --- 収入計算 & ダメージ適用 ---
-        Object.keys(DAIMYO_INFO).forEach(id => {
-            const stats = daimyoStatsRef.current[id];
-            if (stats && stats.isAlive === false) return;
+            let comm = p.commerce;
+            let agri = isAutumn ? p.agriculture : 0;
 
-            const owned = provincesRef.current.filter(p => p.ownerId === id);
-            if (owned.length) {
-                let totalComm = 0;
-                let totalAgri = 0;
-
-                owned.forEach(p => {
-                    let comm = p.commerce;
-                    let agri = isAutumn ? p.agriculture : 0;
-
-                    // ★戦闘ダメージ適用
-                    if (p.battleDamage) {
-                        const { commerce: commRate, agriculture: agriRate, seasonCheck, tactic } = p.battleDamage;
-                        
-                        // 商業: 常に減少
-                        const commDmg = Math.floor(comm * commRate);
-                        comm -= commDmg;
-
-                        // 農業: 秋のみ減少計算
-                        if (isAutumn) {
-                            // 夏(1)に攻められた場合、または秋(2)当期に攻められた場合
-                            // 要件:「夏に攻められている場合は秋の兵糧収入が激減」
-                            if (seasonCheck === 1 || seasonCheck === 2) {
-                                const agriDmg = Math.floor(agri * agriRate);
-                                agri -= agriDmg;
-                                if (id === playerDaimyoId && agriDmg > 0) {
-                                    showLog(`${p.name}: 戦火により兵糧収入減 (戦術:${tactic==='siege'?'籠城':'出城'})`);
-                                }
-                            }
+            // 戦闘ダメージ適用
+            if (p.battleDamage) {
+                const { commerce: commRate, agriculture: agriRate, seasonCheck, tactic } = p.battleDamage;
+                const commDmg = Math.floor(comm * commRate);
+                comm -= commDmg;
+                if (isAutumn) {
+                     // 夏(1)または秋(2)に攻められた場合
+                    if (seasonCheck === 1 || seasonCheck === 2) {
+                        const agriDmg = Math.floor(agri * agriRate);
+                        agri -= agriDmg;
+                        if (daimyoId === playerDaimyoId && agriDmg > 0) {
+                            showLog(`${p.name}: 戦火により兵糧収入減`);
                         }
                     }
-                    
-                    totalComm += comm;
-                    totalAgri += agri;
-                });
-
-                const commerceIncome = Math.floor(totalComm * 1.2);
-                const agIncome = Math.floor(totalAgri * 2.0);
-                updateResource(id, commerceIncome, agIncome);
+                }
             }
-        });
 
-        // 最後にダメージ情報をクリア
-        setProvinces(curr => curr.map(p => ({ ...p, battleDamage: null })));
+            const commIncome = Math.floor(comm * 1.2);
+            const agIncome = Math.floor(agri * 2.0);
+
+            // ★維持費計算 (軍事制度による分岐)
+            let goldMaint = 0;
+            let riceMaint = 0;
+            
+            if (system === 'separated') {
+                // 兵農分離: 金がかかる
+                goldMaint = Math.floor(p.troops * 0.5);
+                riceMaint = Math.floor(p.troops * 0.05);
+            } else if (system === 'ichiryo') {
+                // 一領具足: ほぼタダ
+                goldMaint = 0;
+                riceMaint = Math.floor(p.troops * 0.02);
+            } else {
+                // 標準
+                goldMaint = 0;
+                riceMaint = Math.floor(p.troops * 0.1);
+            }
+
+            let newGold = (p.gold || 0) + commIncome - goldMaint;
+            let newRice = (p.rice || 0) + agIncome - riceMaint;
+            let newTroops = p.troops;
+
+            // 兵糧不足処理
+            if (newRice < 0) {
+                const deserters = Math.min(newTroops, Math.abs(newRice) * 2);
+                newTroops -= deserters;
+                newRice = 0;
+                if (deserters > 0 && daimyoId === playerDaimyoId) {
+                    showLog(`${p.name}: 兵糧不足により${deserters}の兵が逃亡！`);
+                }
+            }
+            
+            // 資金不足処理
+            if (newGold < 0) {
+                newGold = 0;
+            }
+
+            return { 
+                ...p, 
+                gold: newGold,
+                rice: newRice,
+                troops: newTroops,
+                actionsLeft: 3,
+                battleDamage: null 
+            };
+        }));
 
         if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
     };
