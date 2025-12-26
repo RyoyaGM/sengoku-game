@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
-import { SEA_ROUTES } from './data/provinces';
-import { getFormattedDate, getRiceMarketPrice } from './utils/helpers';
+// import { SEA_ROUTES } ... 不要になるため削除
+import { getRiceMarketPrice } from './utils/helpers'; // getFormattedDateも不要なら削除可能(GameLoopで使ってるので)
 import { 
   INITIAL_RESOURCES, 
   INITIAL_ALLIANCES, 
@@ -12,6 +12,7 @@ import {
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
+// Components
 import { StartScreen, ResourceBar, ControlPanel, SpectatorControls } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 import { 
@@ -19,19 +20,19 @@ import {
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal 
 } from './components/Modals';
-
 import { 
-  ReinforcementRequestModal, 
-  RewardPaymentModal, 
-  BetrayalWarningModal 
+  ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal 
 } from './components/BattleModals';
 
+// Hooks
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
 import { usePlayerActions } from './hooks/usePlayerActions';
 import { useGameLoop } from './hooks/useGameLoop';
+import { useMapControls } from './hooks/useMapControls'; // ★追加
 
 const App = () => {
+  // --- Game State ---
   const [provinces, setProvinces] = useState(INITIAL_PROVINCES);
   const [daimyoStats, setDaimyoStats] = useState(INITIAL_RESOURCES);
   const [alliances, setAlliances] = useState(INITIAL_ALLIANCES);
@@ -45,23 +46,18 @@ const App = () => {
   const [aiSpeed, setAiSpeed] = useState(300);
   const [isPaused, setIsPaused] = useState(false);
 
+  // --- UI Selection State ---
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
   const [attackSourceId, setAttackSourceId] = useState(null);
   const [transportSourceId, setTransportSourceId] = useState(null);
   const [viewingRelationId, setViewingRelationId] = useState(null);
-  const [mapTransform, setMapTransform] = useState({ x: 0, y: 0, scale: 0.6 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
-
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [draggingProvinceId, setDraggingProvinceId] = useState(null);
-
+  
   const [modalState, setModalState] = useState({ type: null, data: null }); 
   const [logs, setLogs] = useState([]);
   const [lastLog, setLastLog] = useState('大名を選択して天下統一を目指せ。');
-
   const [isResolvingBattles, setIsResolvingBattles] = useState(false);
   
+  // --- Refs ---
   const provincesRef = useRef(provinces);
   const alliancesRef = useRef(alliances);
   const ceasefiresRef = useRef(ceasefires);
@@ -72,20 +68,7 @@ const App = () => {
   useEffect(() => { ceasefiresRef.current = ceasefires; }, [ceasefires]);
   useEffect(() => { daimyoStatsRef.current = daimyoStats; }, [daimyoStats]);
 
-  useEffect(() => {
-      const kyoto = provinces.find(p => p.id === 'kyoto' || p.id === 'yamashiro');
-      if (kyoto) {
-          const initialScale = 0.6; 
-          const screenW = window.innerWidth;
-          const screenH = window.innerHeight;
-          const newX = (screenW / 2) - (kyoto.cx * initialScale);
-          const newY = (screenH / 2) - (kyoto.cy * initialScale);
-          setMapTransform({ x: newX, y: newY, scale: initialScale });
-      }
-  }, []); 
-
-  // --- ヘルパー関数 (showLogは削除) ---
-
+  // --- Helper Functions ---
   const updateResource = (id, g, r, f=0, d=0) => {
       setDaimyoStats(prev => {
           if (!prev[id]) return prev; 
@@ -103,20 +86,24 @@ const App = () => {
 
   const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
 
-  // --- Hooks (呼び出し順序が重要) ---
+  // --- 1. Map Controls Hook (★追加) ---
+  const {
+      mapTransform, isDragging, isEditMode, setIsEditMode, setDraggingProvinceId,
+      handleWheel, handleMouseDown, handleGlobalMouseMove, handleMouseUp, exportData
+  } = useMapControls({ provinces, setProvinces });
 
-  // ★ 1. GameLoop (showLogを生成して返す)
+  // --- 2. GameLoop Hook ---
   const {
       turn, setTurn, gameState, turnOrder, currentTurnIndex, isPlayerTurn, setIsPlayerTurn,
-      advanceTurn, startNewSeason, showLog // ← ここで受け取る
+      advanceTurn, startNewSeason, showLog
   } = useGameLoop({
       provincesRef, daimyoStatsRef, setDaimyoStats, setProvinces, setCeasefires,
       coalition, setCoalition, playerDaimyoId, updateResource, setModalState,
       aiSpeed, isPaused, setSelectedProvinceId, setAttackSourceId, setTransportSourceId,
-      setLogs, setLastLog // ログのsetterを渡す
+      setLogs, setLastLog
   });
 
-  // ★ 2. BattleSystem (showLogを渡す)
+  // --- 3. BattleSystem Hook ---
   const { 
       pendingBattles, setPendingBattles, processNextPendingBattle, 
       handleReinforcementDecision, handleBattleFinish, handleRewardPayment 
@@ -125,7 +112,7 @@ const App = () => {
       advanceTurn, playerDaimyoId, daimyoStats, modalState, setModalState, setIsResolvingBattles
   });
 
-  // ★ 3. PlayerActions (showLogを渡す)
+  // --- 4. PlayerActions Hook ---
   const { 
       handleDomesticAction, handleMilitaryAction, handleDiplomacy, handleTroopAction, executeBetrayal 
   } = usePlayerActions({
@@ -134,15 +121,14 @@ const App = () => {
       setTransportSourceId, selectedProvinceId, modalState
   });
 
-  // ★ 4. AiSystem (showLogを渡す)
+  // --- 5. AiSystem Hook ---
   const { processAiTurn } = useAiSystem({
       provincesRef, daimyoStatsRef, alliancesRef, ceasefiresRef, relations, setProvinces,
       updateResource, setPendingBattles, showLog, advanceTurn, playerDaimyoId, turn,
       isPaused, aiSpeed
   });
 
-  // --- イベントループ制御 ---
-  
+  // --- Event Loop Effect ---
   useEffect(() => {
       if (turnOrder.length === 0 || currentTurnIndex === -1 || isResolvingBattles) return;
       
@@ -170,8 +156,7 @@ const App = () => {
       }
   }, [currentTurnIndex, turnOrder, isPaused, pendingBattles.length, isResolvingBattles]); 
 
-  // --- その他イベントハンドラ ---
-
+  // --- Other Handlers ---
   const handlePauseToggle = () => setIsPaused(prev => !prev);
 
   const handleEventDecision = (event, choice) => {
@@ -234,45 +219,6 @@ const App = () => {
       }
   };
 
-  const exportData = () => {
-      const cleanProvinces = provinces.map(({ actionsLeft, ...rest }) => rest);
-      const provincesString = cleanProvinces.map(p => '  ' + JSON.stringify(p)).join(',\n');
-      const fileContent = `// src/data/provinces.js\n\nexport const SEA_ROUTES = ${JSON.stringify(SEA_ROUTES, null, 4)};\n\nexport const PROVINCE_DATA_BASE = [\n${provincesString}\n];\n`;
-      
-      const blob = new Blob([fileContent], { type: 'text/javascript' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url; link.download = 'provinces.js';
-      document.body.appendChild(link); link.click();
-      document.body.removeChild(link); URL.revokeObjectURL(url);
-      alert("provinces.jsをダウンロードしました。");
-  };
-
-  const handleWheel = (e) => {
-    const scaleAmount = -e.deltaY * 0.001;
-    const newScale = Math.min(Math.max(0.2, mapTransform.scale + scaleAmount), 3);
-    const ratio = newScale / mapTransform.scale;
-    const newX = e.clientX - (e.clientX - mapTransform.x) * ratio;
-    const newY = e.clientY - (e.clientY - mapTransform.y) * ratio;
-    setMapTransform({ x: newX, y: newY, scale: newScale });
-  };
-
-  const handleGlobalMouseMove = (e) => {
-      if (draggingProvinceId && isEditMode) {
-          const deltaX = e.movementX / mapTransform.scale;
-          const deltaY = e.movementY / mapTransform.scale;
-          setProvinces(prev => prev.map(p => {
-              if (p.id === draggingProvinceId) return { ...p, cx: p.cx + deltaX, cy: p.cy + deltaY };
-              return p;
-          }));
-      } else if (e.buttons === 1) {
-          if (Math.abs(e.clientX - dragStartPos.x) > 5 || Math.abs(e.clientY - dragStartPos.y) > 5) {
-              setIsDragging(true);
-              setMapTransform(p => ({ ...p, x: p.x + e.movementX, y: p.y + e.movementY }));
-          }
-      }
-  };
-
   if (!playerDaimyoId) return <StartScreen onSelectDaimyo={setPlayerDaimyoId} />;
 
   const currentDaimyoId = turnOrder[currentTurnIndex];
@@ -291,10 +237,11 @@ const App = () => {
             {isEditMode && (<button onClick={exportData} className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white">データ出力(保存)</button>)}
         </div>
 
+        {/* マップ描画エリア: イベントハンドラをHookから適用 */}
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
-             onMouseDown={(e) => { setDragStartPos({x:e.clientX, y:e.clientY}); setIsDragging(false); }}
+             onMouseDown={handleMouseDown}
              onMouseMove={handleGlobalMouseMove} 
-             onMouseUp={() => { setDraggingProvinceId(null); setIsDragging(false); }}     
+             onMouseUp={handleMouseUp}     
              onWheel={handleWheel}>
             
             <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75">
@@ -312,6 +259,7 @@ const App = () => {
             </div>
         </div>
 
+        {/* --- Modals and Panels --- */}
         {selectedProvinceId && (
             <ProvincePopup 
                 selectedProvince={selectedProvinceId ? provinces.find(p => p.id === selectedProvinceId) : null}
@@ -341,6 +289,7 @@ const App = () => {
             currentDaimyoId={currentDaimyoId} isPaused={isPaused}
         />
         
+        {/* その他のモーダル群（変更なし） */}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
         
