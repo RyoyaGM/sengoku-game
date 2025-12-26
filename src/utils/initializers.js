@@ -1,103 +1,37 @@
+// src/utils/initializers.js
+import { PROVINCES } from '../data/provinces';
 import { DAIMYO_INFO, HISTORICAL_FAME } from '../data/daimyos';
-import { PROVINCE_DATA_BASE } from '../data/provinces';
 
-// --- 初期リソース計算 ---
-export const INITIAL_RESOURCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => {
-  const baseFame = HISTORICAL_FAME[key] || 50;
-  acc[key] = { 
-      gold: 300, 
-      rice: 300, 
-      fame: baseFame, 
-      donatedImperial: 0, 
-      donatedShogunate: 0, 
-      titles: [], 
-      rank: null,
-      isAlive: true // 初期状態は全員生存
-  };
-  return acc;
+export const INITIAL_PROVINCES = PROVINCES.map(p => ({
+  ...p,
+  troops: 100,
+  agriculture: 100,
+  commerce: 100,
+  loyalty: 80,
+  defense: 40,
+  training: 40,
+  actionsLeft: 3,
+  
+  // ★拠点ごとの資源（独立採算制）
+  gold: 300, 
+  rice: 500,
+  
+  battleDamage: null
+}));
+
+export const INITIAL_RESOURCES = Object.keys(DAIMYO_INFO).reduce((acc, id) => {
+    // 大名自体の所持金・兵糧は削除（各拠点に分散）
+    // Fame(名声)と生存フラグのみ管理する
+    // UI互換性のためにgold, riceは残すが0固定
+    acc[id] = { 
+        fame: HISTORICAL_FAME[id] || 0, 
+        isAlive: true,
+        gold: 0, 
+        rice: 0 
+    };
+    return acc;
 }, {});
 
-// 個別の初期設定
-if(INITIAL_RESOURCES['Ashikaga']) { INITIAL_RESOURCES['Ashikaga'].gold = 1000; INITIAL_RESOURCES['Ashikaga'].titles = ['征夷大将軍']; INITIAL_RESOURCES['Ashikaga'].rank = '従三位'; }
-if(INITIAL_RESOURCES['Sho']) { INITIAL_RESOURCES['Sho'].titles = ['琉球王']; }
-if(INITIAL_RESOURCES['Ryukyu_Sho']) { INITIAL_RESOURCES['Ryukyu_Sho'].titles = ['琉球王']; }
-if(INITIAL_RESOURCES['Kitabatake']) { INITIAL_RESOURCES['Kitabatake'].titles = []; INITIAL_RESOURCES['Kitabatake'].rank = '従五位下'; }
-
-// --- 同盟関係 ---
-export const INITIAL_ALLIANCES = Object.keys(DAIMYO_INFO).reduce((acc, key) => ({...acc, [key]: []}), {});
-const setAlliance = (a, b) => { if(INITIAL_ALLIANCES[a]) INITIAL_ALLIANCES[a].push(b); if(INITIAL_ALLIANCES[b]) INITIAL_ALLIANCES[b].push(a); };
-
-// 初期同盟の設定
-setAlliance('Takeda', 'Hojo'); 
-setAlliance('Takeda', 'Imagawa'); 
-setAlliance('Hojo', 'Imagawa');
-setAlliance('Azai', 'Asakura');
-
-// ★追加: 織水同盟 (織田 - 水野)
-// これにより知多半島が安全地帯となり、織田が東へ無闇に拡大するのを防ぎます
-setAlliance('Oda', 'Mizuno');
-
-// --- 停戦・外交関係 ---
-export const INITIAL_CEASEFIRES = Object.keys(DAIMYO_INFO).reduce((acc, key) => ({...acc, [key]: {}}), {});
-
-const getInitialRelations = () => {
-    const rel = {};
-    const ids = Object.keys(DAIMYO_INFO);
-    ids.forEach(id => {
-        rel[id] = {};
-        ids.forEach(target => {
-            if (id === target) return;
-            let val = 50; // デフォルトは50
-            
-            // 同盟関係がある場合は友好度高め
-            if (INITIAL_ALLIANCES[id] && INITIAL_ALLIANCES[id].includes(target)) {
-                val = 80;
-            }
-
-            // 個別の調整
-            if (id === 'Takeda' && target === 'Hojo') val = 90;
-            if ((id === 'Oda' && target === 'Imagawa') || (id === 'Takeda' && target === 'Uesugi')) val = 10;
-
-            // ★追加: 織田と徳川の微妙な関係 (清州同盟前)
-            // 敵対はしていないが同盟も組んでいない状態。
-            // 65程度あれば、AIは他の敵対勢力（今川や斎藤など関係値の低い相手）を優先して攻撃する傾向になります。
-            if ((id === 'Oda' && target === 'Tokugawa') || (id === 'Tokugawa' && target === 'Oda')) {
-                val = 65; 
-            }
-
-            rel[id][target] = val;
-        });
-    });
-    return rel;
-};
-export const INITIAL_RELATIONS = getInitialRelations();
-
-// --- 国データの初期化 ---
-function validateAndFixData(db) {
-    const idMap = new Map();
-    db.forEach(p => idMap.set(p.id, p));
-    db.forEach(p => {
-        p.neighbors.forEach(neighborId => {
-            const neighbor = idMap.get(neighborId);
-            if (neighbor) {
-                if (!neighbor.neighbors.includes(p.id)) {
-                    neighbor.neighbors.push(p.id);
-                }
-            } else {
-                console.error(`Error: Province ${p.id} references missing neighbor ${neighborId}`);
-            }
-        });
-    });
-}
-
-validateAndFixData(PROVINCE_DATA_BASE);
-
-export const INITIAL_PROVINCES = PROVINCE_DATA_BASE.map(p => ({
-  ...p,
-  cx: p.cx * 2, cy: p.cy * 2,
-  troops: p.troops || 500,
-  commerce: p.commerce || 40,
-  agriculture: p.agriculture || 40,
-  defense: p.defense || 30,
-  loyalty: 60, training: 50, actionsLeft: 3
-}));
+export const INITIAL_ALLIANCES = Object.keys(DAIMYO_INFO).reduce((acc, id) => { acc[id] = []; return acc; }, {});
+export const INITIAL_CEASEFIRES = Object.keys(DAIMYO_INFO).reduce((acc, id) => { acc[id] = {}; return acc; }, {});
+export const INITIAL_RELATIONS = {};

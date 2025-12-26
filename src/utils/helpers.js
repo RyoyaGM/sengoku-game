@@ -1,20 +1,70 @@
-// 日付フォーマット
-export const getFormattedDate = (turn) => {
-  const startYear = 1560;
-  const elapsedYears = Math.floor((turn - 1) / 4);
-  const seasonIdx = (turn - 1) % 4;
-  const seasons = ['春', '夏', '秋', '冬'];
-  return `${startYear + elapsedYears}年 ${seasons[seasonIdx]}`;
-};
+// src/utils/helpers.js
+import { DAIMYO_INFO } from '../data/daimyos';
 
-// 米相場計算
 export const getRiceMarketPrice = (turn) => {
-  const seasonIdx = (turn - 1) % 4;
-  const prices = [1.5, 2.0, 0.6, 1.0]; // 春, 夏, 秋, 冬
-  return prices[seasonIdx] || 1.0;
+    // 秋(収穫期)は安く、春(端境期)は高い
+    const season = (turn - 1) % 4; // 0:春, 1:夏, 2:秋, 3:冬
+    const basePrice = 1.0;
+    const fluctuation = Math.sin(turn * 0.5) * 0.2; 
+    
+    // 季節変動: 秋(2)は安く、春(0)は高く
+    let seasonFactor = 0;
+    if (season === 0) seasonFactor = 0.3; // 春: 高騰
+    if (season === 2) seasonFactor = -0.3; // 秋: 暴落
+
+    return Math.max(0.5, (basePrice + fluctuation + seasonFactor).toFixed(2));
 };
 
-// 距離計算
-export const getDistance = (p1, p2) => {
-    return Math.sqrt(Math.pow(p1.cx - p2.cx, 2) + Math.pow(p1.cy - p2.cy, 2));
+export const getFormattedDate = (turn) => {
+    const year = 1560 + Math.floor((turn - 1) / 4);
+    const seasons = ['春', '夏', '秋', '冬'];
+    const season = seasons[(turn - 1) % 4];
+    return `${year}年 ${season}`;
+};
+
+// ★ターンから季節IDを取得
+export const getSeason = (turn) => {
+  const seasonIdx = (turn - 1) % 4;
+  return ['spring', 'summer', 'autumn', 'winter'][seasonIdx];
+};
+
+// ★拠点の軍役（最大維持可能兵数）
+export const getTroopCapacity = (province) => {
+    const koku = province.agriculture + province.commerce;
+    return koku * 10; 
+};
+
+// ★季節と大名の制度に応じたアクションコスト計算
+export const getActionCost = (actionType, baseCost, turn, daimyoId) => {
+  const season = getSeason(turn);
+  const daimyo = DAIMYO_INFO[daimyoId];
+  const system = daimyo?.militarySystem || 'standard';
+  const isBusySeason = season === 'summer' || season === 'autumn';
+  
+  let modifier = 1.0;
+
+  // 農繁期(夏・秋)の軍事行動コスト
+  if (isBusySeason && ['attack', 'move', 'recruit', 'forced_recruit'].includes(actionType)) {
+      if (system === 'separated') {
+          // 兵農分離: 影響なし
+          modifier = 1.0;
+      } else if (system === 'ichiryo') {
+          // 一領具足: 致命的コスト（ロジック側で農業減などのペナルティも追加されるがコストも増える）
+          modifier = 3.0;
+      } else {
+          // 標準: コスト増
+          modifier = 1.5;
+      }
+  }
+  
+  // 冬の進軍
+  if (season === 'winter' && ['attack', 'move'].includes(actionType)) {
+     modifier = Math.max(modifier, 2.0);
+  }
+
+  return {
+      ...baseCost,
+      gold: Math.floor(baseCost.gold * modifier),
+      rice: Math.floor(baseCost.rice * modifier)
+  };
 };
