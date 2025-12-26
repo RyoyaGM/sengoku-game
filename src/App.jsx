@@ -15,7 +15,6 @@ import japanMapImg from './assets/japan_map.jpg';
 import { StartScreen, ResourceBar, ControlPanel, SpectatorControls } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 
-// ★修正: Modalsのインポート元を正しく分割
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
@@ -25,6 +24,9 @@ import {
 import { 
   ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal, TacticSelectionModal 
 } from './components/BattleModals';
+
+// ★追加: 新しいモーダルをインポート
+import { TransportModal } from './components/TransportModal';
 
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
@@ -106,7 +108,8 @@ const App = () => {
       provinces, setProvinces, daimyoStats, setDaimyoStats, alliances, setAlliances, relations,
       playerDaimyoId, turn, updateResource, showLog, setModalState, setAttackSourceId,
       setTransportSourceId, selectedProvinceId, modalState,
-      setPendingBattles 
+      setPendingBattles,
+      setRelations 
   });
 
   const { processAiTurn } = useAiSystem({
@@ -147,7 +150,18 @@ const App = () => {
           const type = isTargetable ? 'attack' : 'transport';
           const srcId = isTargetable ? attackSourceId : transportSourceId;
           const src = provinces.find(p => p.id === srcId);
-          setModalState({ type: 'troop', data: { type, sourceId: srcId, targetId: pid, maxTroops: src.troops } });
+          // ★修正: 輸送の場合は新しいモーダルタイプを設定
+          setModalState({ 
+              type: type === 'transport' ? 'transport_selection' : 'troop', 
+              data: { 
+                  type, 
+                  sourceId: srcId, 
+                  targetId: pid, 
+                  maxTroops: src.troops,
+                  maxGold: src.gold, // 金・米の上限も渡す
+                  maxRice: src.rice 
+              } 
+          });
       } else {
           if (!attackSourceId && !transportSourceId) setSelectedProvinceId(pid === selectedProvinceId ? null : pid);
       }
@@ -198,8 +212,6 @@ const App = () => {
                 onAction={(type, pid, val) => {
                     if (type === 'change_owner') { setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ownerId: val } : p)); return; }
                     
-                    // ★修正: コマンド種類によってハンドラを明確に分ける
-                    // 強制徴兵や軍事系が handleDomesticAction に渡るとコスト未定義でクラッシュするため
                     const domesticTypes = ['develop', 'cultivate', 'pacify', 'fortify', 'market', 'trade'];
                     if (domesticTypes.includes(type)) {
                         handleDomesticAction(type, pid);
@@ -215,13 +227,68 @@ const App = () => {
         {modalState.type === 'tactic_selection' && <TacticSelectionModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} season={getFormattedDate(turn).split(' ')[1]} onSelect={handleTacticSelection} />}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
-        {modalState.type === 'betrayal_warning' && <BetrayalWarningModal targetDaimyoId={modalState.data.targetDaimyoId} onConfirm={() => executeBetrayal(modalState.data.targetDaimyoId, modalState.data.sourceId)} onCancel={() => { setModalState({ type: null }); setAttackSourceId(null); }} />}
+        
+        {modalState.type === 'betrayal_warning' && 
+            <BetrayalWarningModal 
+                targetDaimyoId={modalState.data.targetDaimyoId} 
+                onConfirm={() => executeBetrayal(
+                    modalState.data.targetDaimyoId, 
+                    modalState.data.sourceId, 
+                    modalState.data.targetProvinceId, 
+                    modalState.data.amount,
+                    modalState.data.isCeasefire
+                )} 
+                onCancel={() => { setModalState({ type: null }); setAttackSourceId(null); }} 
+            />
+        }
+        
         {modalState.type === 'battle' && <BattleScene battleData={modalState.data} onFinish={handleBattleFinish} />}
         {modalState.type === 'incoming_request' && <IncomingRequestModal request={modalState.data} onAccept={() => { setModalState({type:null}); }} onReject={() => { setModalState({type:null}); }} />}
-        {modalState.type === 'historical_event' && <HistoricalEventModal event={modalState.data} daimyoId={playerDaimyoId} onSelect={(c) => { setModalState({ type: null }); if (c && c.resolve) c.resolve({setProvinces, updateResource, showLog, setRelations, setDaimyoStats, setAlliances, setCeasefires, daimyoStats: daimyoStatsRef.current, provinces: provincesRef.current, playerDaimyoId}); }} />}
+        
+        {modalState.type === 'historical_event' && (
+            <HistoricalEventModal 
+                event={modalState.data} 
+                daimyoId={playerDaimyoId} 
+                onSelect={(choice) => {
+                    const ctx = {
+                        setProvinces, updateResource, showLog, setRelations, 
+                        setDaimyoStats, setAlliances, setCeasefires, 
+                        daimyoStats: daimyoStatsRef.current, 
+                        provinces: provincesRef.current, 
+                        playerDaimyoId
+                    };
+                    
+                    let nextEvent = null;
+
+                    if (choice && choice.resolve) {
+                        nextEvent = choice.resolve(ctx);
+                    } else if (modalState.data.defaultResolve) {
+                        nextEvent = modalState.data.defaultResolve(ctx);
+                    }
+
+                    if (nextEvent) {
+                        setModalState({ type: 'historical_event', data: nextEvent });
+                    } else {
+                        setModalState({ type: null });
+                        startNewSeason(); 
+                    }
+                }} 
+            />
+        )}
+        
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
-        {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={handleTroopAction} onCancel={() => setModalState({type: null})} />}
+        
+        {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={(amount) => handleTroopAction(amount, ceasefires)} onCancel={() => setModalState({type: null})} />}
+        
+        {/* ★追加: 輸送用モーダル */}
+        {modalState.type === 'transport_selection' && <TransportModal 
+            maxTroops={modalState.data.maxTroops}
+            maxGold={modalState.data.maxGold}
+            maxRice={modalState.data.maxRice}
+            onConfirm={(amounts) => handleTroopAction(amounts, ceasefires)} 
+            onCancel={() => setModalState({type: null})} 
+        />}
         
         {gameState !== 'playing' && <GameOverScreen gameState={gameState} onRestart={() => window.location.reload()} />}
     </div>
