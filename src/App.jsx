@@ -30,6 +30,7 @@ import {
 
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
+import { usePlayerActions } from './hooks/usePlayerActions'; // ★追加
 
 // --- Main App Component ---
 
@@ -68,7 +69,6 @@ const App = () => {
   const [currentTurnIndex, setCurrentTurnIndex] = useState(-1);
   const [isPlayerTurn, setIsPlayerTurn] = useState(false);
   
-  // ★修正: ここで定義 (useBattleSystemより前)
   const [isResolvingBattles, setIsResolvingBattles] = useState(false);
   
   // Ref to access fresh state in closures
@@ -123,10 +123,6 @@ const App = () => {
 
   const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
   
-  const consumeAction = (pid) => setProvinces(prev => prev.map(p => p.id === pid ? { ...p, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
-  
-  const getPlayerActionSource = () => provinces.find(p => p.ownerId === playerDaimyoId && p.actionsLeft > 0);
-
   const advanceTurn = () => { setSelectedProvinceId(null); setAttackSourceId(null); setTransportSourceId(null); setCurrentTurnIndex(prev => prev + 1); };
 
   const checkElimination = () => {
@@ -181,9 +177,8 @@ const App = () => {
       if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
   };
 
-  // --- Step 2: Hooks の呼び出し (ヘルパー関数定義の後) ---
+  // --- Step 2: Hooks の呼び出し ---
   
-  // ★修正: useBattleSystem をここに移動
   const { 
       pendingBattles, 
       setPendingBattles, 
@@ -204,6 +199,32 @@ const App = () => {
       modalState,
       setModalState,
       setIsResolvingBattles
+  });
+
+  // ★追加: プレイヤーアクションフック
+  const { 
+      handleDomesticAction, 
+      handleMilitaryAction, 
+      handleDiplomacy, 
+      handleTroopAction, 
+      executeBetrayal 
+  } = usePlayerActions({
+      provinces,
+      setProvinces,
+      daimyoStats,
+      setDaimyoStats,
+      alliances,
+      setAlliances,
+      relations,
+      playerDaimyoId,
+      turn,
+      updateResource,
+      showLog,
+      setModalState,
+      setAttackSourceId,
+      setTransportSourceId,
+      selectedProvinceId,
+      modalState
   });
 
   const { processAiTurn } = useAiSystem({
@@ -333,85 +354,6 @@ const App = () => {
       }
   };
 
-  const executeBetrayal = (targetId, sourceId) => {
-      setModalState({ type: null });
-      
-      setAlliances(prev => {
-          const next = { ...prev };
-          if (next[playerDaimyoId]) next[playerDaimyoId] = next[playerDaimyoId].filter(id => id !== targetId);
-          if (next[targetId]) next[targetId] = next[targetId].filter(id => id !== playerDaimyoId);
-          return next;
-      });
-
-      updateResource(playerDaimyoId, 0, 0, -50);
-      
-      setDaimyoStats(prev => ({
-          ...prev,
-          [playerDaimyoId]: {
-              ...prev[playerDaimyoId],
-              diplomacyBanUntil: turn + 20 
-          }
-      }));
-
-      setProvinces(prev => prev.map(p => {
-          if (p.ownerId === playerDaimyoId) {
-              return { ...p, loyalty: Math.max(0, (p.loyalty || 50) - 20) };
-          }
-          return p;
-      }));
-
-      showLog(`【裏切り】${DAIMYO_INFO[targetId].name}家との同盟を破棄し攻撃を開始しました！名声が失墜し、民忠が低下しました。`);
-
-      const src = provinces.find(p => p.id === sourceId);
-      setModalState({ 
-          type: 'troop', 
-          data: { 
-              type: 'attack', 
-              sourceId: sourceId, 
-              targetId: provinces.find(p => p.ownerId === targetId && p.id === selectedProvinceId).id, 
-              maxTroops: src.troops 
-          } 
-      });
-  };
-
-  const handleTroopAction = (amount) => {
-      const { type, sourceId, targetId } = modalState.data;
-      setModalState({ type: null });
-      const src = provinces.find(p => p.id === sourceId);
-      const tgt = provinces.find(p => p.id === targetId);
-
-      if (type === 'transport') {
-          updateResource(playerDaimyoId, -COSTS.move.gold, -COSTS.move.rice);
-          setProvinces(prev => prev.map(p => {
-              if (p.id === sourceId) return {...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft-1)};
-              if (p.id === targetId) return {...p, troops: p.troops + amount};
-              return p;
-          }));
-          showLog("輸送完了");
-      } else if (type === 'attack') {
-          updateResource(playerDaimyoId, -COSTS.attack.gold, -COSTS.attack.rice);
-          setProvinces(prev => prev.map(p => p.id === sourceId ? {...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft-1)} : p));
-          
-          let enemyReinforcement = 0;
-          const enemyId = tgt.ownerId;
-          const enemyNeighbors = tgt.neighbors.map(nid => provinces.find(p => p.id === nid));
-          const enemyAllies = enemyNeighbors.filter(n => alliances[enemyId]?.includes(n.ownerId) && n.ownerId !== enemyId);
-          
-          if (enemyAllies.length > 0 && Math.random() < 0.5) {
-               const ally = enemyAllies[0];
-               enemyReinforcement = 300; 
-               const allyName = DAIMYO_INFO[ally.ownerId].name;
-               showLog(`敵軍、${allyName}より援軍(${enemyReinforcement})到着！`);
-          }
-
-          setModalState({ 
-              type: 'battle', 
-              data: { attacker: src, defender: { ...tgt, troops: tgt.troops + enemyReinforcement }, attackerAmount: amount, isPlayerAttack: true } 
-          });
-      }
-      setAttackSourceId(null); setTransportSourceId(null);
-  };
-
   const handleMapSelect = (pid, isTargetable, isTransportTarget) => {
       if (isDragging) return;
       if (isTargetable || isTransportTarget) {
@@ -446,92 +388,6 @@ const App = () => {
       } else {
           if (!attackSourceId && !transportSourceId) setSelectedProvinceId(pid === selectedProvinceId ? null : pid);
       }
-  };
-
-  const handleDiplomacy = (type, targetDaimyoId) => {
-      const banUntil = daimyoStats[playerDaimyoId]?.diplomacyBanUntil || 0;
-      if (turn < banUntil) {
-          return showLog(`信義を失ったため、他国は交渉に応じてくれません (残り${banUntil - turn}ターン)`);
-      }
-
-      const playerSource = getPlayerActionSource();
-      if (!playerSource) return showLog("行動可能な自国拠点がありません"); 
-
-      if (type === 'alliance') {
-         const cost = 500;
-         if (daimyoStats[playerDaimyoId].gold < cost) return showLog("金不足");
-         updateResource(playerDaimyoId, -cost, 0);
-         setAlliances(prev => ({...prev, [playerDaimyoId]: [...(prev[playerDaimyoId]||[]), targetDaimyoId], [targetDaimyoId]: [...(prev[targetDaimyoId]||[]), playerDaimyoId]}));
-         showLog("同盟締結"); consumeAction(playerSource.id);
-      }
-      if (type === 'negotiate') {
-          setModalState({ type: 'negotiate', data: { targetId: targetDaimyoId, provinceId: playerSource.id } }); 
-      }
-  };
-
-  const handleDomesticAction = (type, pid) => {
-      const p = provinces.find(pr => pr.id === pid);
-      if (p.actionsLeft <= 0 && type !== 'market' && type !== 'titles') return showLog("行動力がありません");
-
-      if (type === 'market') return setModalState({ type: 'market' });
-      if (type === 'titles') return setModalState({ type: 'titles' });
-      if (type === 'donate') return setModalState({ type: 'donate' });
-      if (type === 'trade') return setModalState({ type: 'trade' });
-
-      const cost = COSTS[type];
-      const stats = daimyoStats[playerDaimyoId];
-      if (stats.gold < cost.gold || stats.rice < (cost.rice||0)) return showLog("資源不足");
-
-      updateResource(playerDaimyoId, -cost.gold, -(cost.rice||0));
-      consumeAction(pid);
-
-      setProvinces(prev => prev.map(pr => {
-          if (pr.id !== pid) return pr;
-          const next = { ...pr };
-          if (type === 'develop') next.commerce += cost.boost;
-          if (type === 'cultivate') next.agriculture += cost.boost;
-          if (type === 'fortify') next.defense += cost.boost;
-          if (type === 'pacify') next.loyalty = Math.min(100, (next.loyalty||50) + cost.boost);
-          return next;
-      }));
-      showLog(`${DAIMYO_INFO[playerDaimyoId].name}家、${p.name}にて${type==='develop'?'商業発展':type==='cultivate'?'開墾':type==='fortify'?'普請':type==='pacify'?'施し':''}を行いました。`);
-  };
-
-  const handleMilitaryAction = (type, pid) => {
-      const p = provinces.find(pr => pr.id === pid);
-      if (p.actionsLeft <= 0) return showLog("行動力がありません");
-
-      if (type === 'attack') {
-          setAttackSourceId(pid);
-          showLog("攻撃目標を選択してください");
-          setSelectedProvinceId(null);
-          return;
-      }
-      if (type === 'transport') {
-          setTransportSourceId(pid);
-          showLog("輸送先を選択してください");
-          setSelectedProvinceId(null);
-          return;
-      }
-
-      const cost = COSTS[type];
-      const stats = daimyoStats[playerDaimyoId];
-      if (stats.gold < cost.gold || stats.rice < (cost.rice||0)) return showLog("資源不足");
-
-      updateResource(playerDaimyoId, -cost.gold, -(cost.rice||0));
-      consumeAction(pid);
-
-      setProvinces(prev => prev.map(pr => {
-          if (pr.id !== pid) return pr;
-          const next = { ...pr };
-          if (type === 'recruit') {
-              next.troops += cost.troops;
-              next.loyalty = Math.max(0, (next.loyalty||50) - 5);
-          }
-          if (type === 'train') next.training = Math.min(100, (next.training||50) + cost.boost);
-          return next;
-      }));
-      showLog(`${type==='recruit'?'徴兵':'訓練'}を行いました。`);
   };
 
   const exportData = () => {
