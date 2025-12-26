@@ -17,7 +17,8 @@ export const usePlayerActions = ({
     setModalState,
     setAttackSourceId,
     setTransportSourceId,
-    selectedProvinceId
+    selectedProvinceId,
+    modalState // App.jsxから渡されたmodalStateを使用
 }) => {
 
     // --- 共通ヘルパー: 行動力の消費 ---
@@ -122,28 +123,32 @@ export const usePlayerActions = ({
 
     // --- 部隊移動/攻撃の実行 ---
     const handleTroopAction = (amount) => {
-        const { type, sourceId, targetId } = (window.currentModalState || {}).data || {}; // modalStateへの直接アクセスが難しいため引数かグローバル参照、または親から渡す設計にする
-        // ※ここではHookの引数 modalState を利用します
-        const currentModalData = (modalState && modalState.data) ? modalState.data : {};
-        const actionType = currentModalData.type || type;
-        const srcId = currentModalData.sourceId || sourceId;
-        const tgtId = currentModalData.targetId || targetId;
+        // ★修正: windowを参照せず、modalStateから直接データを取得
+        const { type, sourceId, targetId } = modalState?.data || {};
 
         setModalState({ type: null });
-        const src = provinces.find(p => p.id === srcId);
-        const tgt = provinces.find(p => p.id === tgtId);
 
-        if (actionType === 'transport') {
+        // ★追加: データ欠落時の安全策
+        if (!type || !sourceId || !targetId) {
+            console.error("Troop action missing data:", { type, sourceId, targetId });
+            return;
+        }
+
+        const src = provinces.find(p => p.id === sourceId);
+        const tgt = provinces.find(p => p.id === targetId);
+
+        // 以下、変数 type をそのまま使用
+        if (type === 'transport') {
             updateResource(playerDaimyoId, -COSTS.move.gold, -COSTS.move.rice);
             setProvinces(prev => prev.map(p => {
-                if (p.id === srcId) return { ...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft - 1) };
-                if (p.id === tgtId) return { ...p, troops: p.troops + amount };
+                if (p.id === sourceId) return { ...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft - 1) };
+                if (p.id === targetId) return { ...p, troops: p.troops + amount };
                 return p;
             }));
             showLog("輸送完了");
-        } else if (actionType === 'attack') {
+        } else if (type === 'attack') {
             updateResource(playerDaimyoId, -COSTS.attack.gold, -COSTS.attack.rice);
-            setProvinces(prev => prev.map(p => p.id === srcId ? { ...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
+            setProvinces(prev => prev.map(p => p.id === sourceId ? { ...p, troops: p.troops - amount, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
 
             let enemyReinforcement = 0;
             const enemyId = tgt.ownerId;
