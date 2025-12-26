@@ -14,12 +14,17 @@ import japanMapImg from './assets/japan_map.jpg';
 
 import { StartScreen, ResourceBar, ControlPanel, SpectatorControls } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
+
+// ★修正: Modalsのインポート元を正しく分割
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
-  TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal,
-  ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal, TacticSelectionModal
+  TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal
 } from './components/Modals';
+
+import { 
+  ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal, TacticSelectionModal 
+} from './components/BattleModals';
 
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
@@ -61,7 +66,6 @@ const App = () => {
   useEffect(() => { ceasefiresRef.current = ceasefires; }, [ceasefires]);
   useEffect(() => { daimyoStatsRef.current = daimyoStats; }, [daimyoStats]);
 
-  // ★Fameのみ更新する関数に変更（金・米は各拠点で管理）
   const updateResource = (id, g, r, f=0) => {
       setDaimyoStats(prev => {
           if (!prev[id]) return prev; 
@@ -96,14 +100,13 @@ const App = () => {
       turn
   });
 
-  // usePlayerActionsにsetPendingBattlesを渡す
   const { 
       handleDomesticAction, handleMilitaryAction, handleDiplomacy, executeBetrayal, handleTroopAction
   } = usePlayerActions({
       provinces, setProvinces, daimyoStats, setDaimyoStats, alliances, setAlliances, relations,
       playerDaimyoId, turn, updateResource, showLog, setModalState, setAttackSourceId,
       setTransportSourceId, selectedProvinceId, modalState,
-      setPendingBattles // ★追加
+      setPendingBattles 
   });
 
   const { processAiTurn } = useAiSystem({
@@ -152,7 +155,6 @@ const App = () => {
 
   if (!playerDaimyoId) return <StartScreen onSelectDaimyo={setPlayerDaimyoId} />;
 
-  // ★集計ロジック: プレイヤーの全拠点の資源を合計して表示
   const playerProvinces = provinces.filter(p => p.ownerId === playerDaimyoId);
   const totalGold = playerProvinces.reduce((s, p) => s + p.gold, 0);
   const totalRice = playerProvinces.reduce((s, p) => s + p.rice, 0);
@@ -195,7 +197,15 @@ const App = () => {
                 isEditMode={isEditMode}
                 onAction={(type, pid, val) => {
                     if (type === 'change_owner') { setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ownerId: val } : p)); return; }
-                    handleDomesticAction(type, pid) || handleMilitaryAction(type, pid);
+                    
+                    // ★修正: コマンド種類によってハンドラを明確に分ける
+                    // 強制徴兵や軍事系が handleDomesticAction に渡るとコスト未定義でクラッシュするため
+                    const domesticTypes = ['develop', 'cultivate', 'pacify', 'fortify', 'market', 'trade'];
+                    if (domesticTypes.includes(type)) {
+                        handleDomesticAction(type, pid);
+                    } else {
+                        handleMilitaryAction(type, pid);
+                    }
                 }}
             />
         )}
