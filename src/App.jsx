@@ -29,7 +29,7 @@ import {
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
 import { usePlayerActions } from './hooks/usePlayerActions';
-import { useGameLoop } from './hooks/useGameLoop'; // ★追加
+import { useGameLoop } from './hooks/useGameLoop';
 
 const App = () => {
   const [provinces, setProvinces] = useState(INITIAL_PROVINCES);
@@ -84,22 +84,7 @@ const App = () => {
       }
   }, []); 
 
-  // --- ヘルパー関数 ---
-  const showLog = (text) => { 
-      setLastLog(text); 
-      setLogs(prev => {
-          const newLogs = [...prev, `${getFormattedDate(turn)}: ${text}`]; // turnはuseGameLoopから来るが、ここではまだ参照できない。
-          // ★注意: turn変数は下で定義されるため、ここでの参照はクロージャの罠になりうる。
-          // 修正: showLogはuseGameLoopに渡す必要があるが、turnに依存している。
-          // 解決策: useGameLoop内でturnを付与するか、Logs管理もuseGameLoopに移すが、今回は簡易的に
-          // useGameLoopから返ってきたturnを使うため、showLogの定義場所を工夫するか、
-          // GameLoop内では日付なしでログを出し、表示時に付与するなどの設計変更が良い。
-          // いったん「日付なし」で処理し、後で調整します。
-          return newLogs; 
-      }); 
-  };
-  // ※ 上記の問題を避けるため、簡易的に日付付与はコンポーネント側で行うか、Refを使うのが定石です。
-  // 今回はリファクタリングの過程なので、日付表示がいったん消える可能性がありますが、動作優先で進めます。
+  // --- ヘルパー関数 (showLogは削除) ---
 
   const updateResource = (id, g, r, f=0, d=0) => {
       setDaimyoStats(prev => {
@@ -118,22 +103,20 @@ const App = () => {
 
   const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
 
-  // --- Hooks ---
+  // --- Hooks (呼び出し順序が重要) ---
 
-  // ★ 1. GameLoop (最優先)
+  // ★ 1. GameLoop (showLogを生成して返す)
   const {
       turn, setTurn, gameState, turnOrder, currentTurnIndex, isPlayerTurn, setIsPlayerTurn,
-      advanceTurn, startNewSeason
+      advanceTurn, startNewSeason, showLog // ← ここで受け取る
   } = useGameLoop({
       provincesRef, daimyoStatsRef, setDaimyoStats, setProvinces, setCeasefires,
-      coalition, setCoalition, playerDaimyoId, updateResource, showLog, setModalState,
-      aiSpeed, isPaused, setSelectedProvinceId, setAttackSourceId, setTransportSourceId
+      coalition, setCoalition, playerDaimyoId, updateResource, setModalState,
+      aiSpeed, isPaused, setSelectedProvinceId, setAttackSourceId, setTransportSourceId,
+      setLogs, setLastLog // ログのsetterを渡す
   });
 
-  // 日付付きログのためのラッパー (turnが確定してから再定義はできないので、useGameLoop内で行うのがベストだが、ここでは簡易対応)
-  // 実際にはshowLogをuseGameLoopに移動するのが正しい設計です。
-
-  // ★ 2. BattleSystem
+  // ★ 2. BattleSystem (showLogを渡す)
   const { 
       pendingBattles, setPendingBattles, processNextPendingBattle, 
       handleReinforcementDecision, handleBattleFinish, handleRewardPayment 
@@ -142,7 +125,7 @@ const App = () => {
       advanceTurn, playerDaimyoId, daimyoStats, modalState, setModalState, setIsResolvingBattles
   });
 
-  // ★ 3. PlayerActions
+  // ★ 3. PlayerActions (showLogを渡す)
   const { 
       handleDomesticAction, handleMilitaryAction, handleDiplomacy, handleTroopAction, executeBetrayal 
   } = usePlayerActions({
@@ -151,14 +134,14 @@ const App = () => {
       setTransportSourceId, selectedProvinceId, modalState
   });
 
-  // ★ 4. AiSystem
+  // ★ 4. AiSystem (showLogを渡す)
   const { processAiTurn } = useAiSystem({
       provincesRef, daimyoStatsRef, alliancesRef, ceasefiresRef, relations, setProvinces,
       updateResource, setPendingBattles, showLog, advanceTurn, playerDaimyoId, turn,
       isPaused, aiSpeed
   });
 
-  // --- イベントループ制御 (AI呼び出しと戦闘解決) ---
+  // --- イベントループ制御 ---
   
   useEffect(() => {
       if (turnOrder.length === 0 || currentTurnIndex === -1 || isResolvingBattles) return;
