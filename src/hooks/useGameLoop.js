@@ -14,19 +14,31 @@ export const useGameLoop = ({
     setCoalition,
     playerDaimyoId,
     updateResource,
-    showLog,
     setModalState,
     aiSpeed,
     isPaused,
     setSelectedProvinceId,
     setAttackSourceId,
-    setTransportSourceId
+    setTransportSourceId,
+    // ログ管理用のSetterを受け取る
+    setLogs,
+    setLastLog
 }) => {
     const [turn, setTurn] = useState(1);
     const [gameState, setGameState] = useState('playing');
     const [turnOrder, setTurnOrder] = useState([]);
     const [currentTurnIndex, setCurrentTurnIndex] = useState(-1);
     const [isPlayerTurn, setIsPlayerTurn] = useState(false);
+
+    // --- ログ機能の定義 (ここで定義することでturnを直接参照できる) ---
+    const showLog = (text) => {
+        setLastLog(text);
+        setLogs(prev => {
+            const newLogs = [...prev, `${getFormattedDate(turn)}: ${text}`];
+            if (newLogs.length > 100) return newLogs.slice(newLogs.length - 100);
+            return newLogs;
+        });
+    };
 
     // --- ターン進行の基本アクション ---
     const advanceTurn = () => {
@@ -148,6 +160,7 @@ export const useGameLoop = ({
         isPlayerTurn,
         setIsPlayerTurn,
         advanceTurn,
-        startNewSeason
+        startNewSeason,
+        showLog // ★ここで定義したshowLogを返す
     };
 };
