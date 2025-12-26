@@ -22,12 +22,14 @@ import {
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal 
 } from './components/Modals';
 
+// ★追加: 分離したモーダルのインポート
 import { 
   ReinforcementRequestModal, 
   RewardPaymentModal, 
   BetrayalWarningModal 
-} from './components/BattleModals'; //
+} from './components/BattleModals';
 
+// ★追加: AIロジックフックのインポート
 import { useAiSystem } from './hooks/useAiSystem';
 
 // --- Main App Component ---
@@ -76,23 +78,6 @@ const App = () => {
   const [pendingBattles, setPendingBattles] = useState([]); 
   const [isResolvingBattles, setIsResolvingBattles] = useState(false);
 
-  const { processAiTurn } = useAiSystem({
-      provincesRef,
-      daimyoStatsRef,
-      alliancesRef,
-      ceasefiresRef,
-      relations,
-      setProvinces,
-      updateResource,
-      setPendingBattles,
-      showLog,
-      advanceTurn,
-      playerDaimyoId,
-      turn,
-      isPaused,
-      aiSpeed
-    });
-
   useEffect(() => { provincesRef.current = provinces; }, [provinces]);
   useEffect(() => { alliancesRef.current = alliances; }, [alliances]);
   useEffect(() => { ceasefiresRef.current = ceasefires; }, [ceasefires]);
@@ -111,6 +96,40 @@ const App = () => {
       }
   }, []); 
 
+  // --- Step 1: 先にヘルパー関数を定義する (useAiSystemより前に) ---
+
+  const showLog = (text) => { 
+      setLastLog(text); 
+      setLogs(prev => {
+          const newLogs = [...prev, `${getFormattedDate(turn)}: ${text}`];
+          if (newLogs.length > 100) return newLogs.slice(newLogs.length - 100);
+          return newLogs;
+      }); 
+  };
+  
+  const updateResource = (id, g, r, f=0, d=0) => {
+      setDaimyoStats(prev => {
+          if (!prev[id]) return prev; 
+          return {
+              ...prev, 
+              [id]: { 
+                  ...prev[id], 
+                  gold: Math.max(0,(prev[id].gold||0)+g), 
+                  rice: Math.max(0,(prev[id].rice||0)+r), 
+                  fame: Math.max(0,(prev[id].fame||0)+f) 
+              }
+          };
+      });
+  };
+
+  const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
+  
+  const consumeAction = (pid) => setProvinces(prev => prev.map(p => p.id === pid ? { ...p, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
+  
+  const getPlayerActionSource = () => provinces.find(p => p.ownerId === playerDaimyoId && p.actionsLeft > 0);
+
+  const advanceTurn = () => { setSelectedProvinceId(null); setAttackSourceId(null); setTransportSourceId(null); setCurrentTurnIndex(prev => prev + 1); };
+
   const checkElimination = () => {
       setDaimyoStats(prev => {
           let hasChange = false;
@@ -126,6 +145,63 @@ const App = () => {
           return hasChange ? next : prev;
       });
   };
+
+  const determineTurnOrder = () => {
+      const active = Object.keys(DAIMYO_INFO).filter(id => {
+          if (id === 'Minor') return false;
+          return daimyoStats[id]?.isAlive !== false;
+      });
+      active.sort((a,b) => (daimyoStats[b]?.fame||0) - (daimyoStats[a]?.fame||0));
+      setTurnOrder(active); setCurrentTurnIndex(0);
+  };
+
+  const startNewSeason = () => {
+      checkElimination();
+
+      const isAutumn = (turn - 1) % 4 === 2;
+      setCeasefires(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(k => Object.keys(next[k]).forEach(t => { if(next[k][t]>0) next[k][t]--; }));
+          return next;
+      });
+      if (coalition) {
+          if (coalition.duration <= 1) { setCoalition(null); showLog("包囲網が解散しました。"); }
+          else setCoalition(prev => ({...prev, duration: prev.duration - 1}));
+      }
+      setProvinces(curr => curr.map(p => ({...p, actionsLeft: 3})));
+      Object.keys(DAIMYO_INFO).forEach(id => {
+          if (daimyoStats[id] && daimyoStats[id].isAlive === false) return;
+
+          const owned = provincesRef.current.filter(p => p.ownerId === id);
+          if (owned.length) {
+              const commerceIncome = Math.floor(owned.reduce((s,p)=>s+p.commerce,0) * 1.2); 
+              const agIncome = isAutumn ? Math.floor(owned.reduce((s,p)=>s+p.agriculture,0) * 2.0) : 0; 
+              updateResource(id, commerceIncome, agIncome);
+          }
+      });
+      if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
+  };
+
+  // --- Step 2: useAiSystem の呼び出し (関数定義の後) ---
+  
+  const { processAiTurn } = useAiSystem({
+      provincesRef,
+      daimyoStatsRef,
+      alliancesRef,
+      ceasefiresRef,
+      relations,
+      setProvinces,
+      updateResource,
+      setPendingBattles,
+      showLog,
+      advanceTurn,
+      playerDaimyoId,
+      turn,
+      isPaused,
+      aiSpeed
+  });
+
+  // --- Step 3: useEffect (processAiTurnを使う) ---
 
   useEffect(() => {
     checkElimination();
@@ -185,33 +261,7 @@ const App = () => {
       }
   }, [currentTurnIndex, turnOrder, isPaused, pendingBattles.length, isResolvingBattles]); 
 
-  const showLog = (text) => { 
-      setLastLog(text); 
-      setLogs(prev => {
-          const newLogs = [...prev, `${getFormattedDate(turn)}: ${text}`];
-          if (newLogs.length > 100) return newLogs.slice(newLogs.length - 100);
-          return newLogs;
-      }); 
-  };
-  
-  const updateResource = (id, g, r, f=0, d=0) => {
-      setDaimyoStats(prev => {
-          if (!prev[id]) return prev; 
-          return {
-              ...prev, 
-              [id]: { 
-                  ...prev[id], 
-                  gold: Math.max(0,(prev[id].gold||0)+g), 
-                  rice: Math.max(0,(prev[id].rice||0)+r), 
-                  fame: Math.max(0,(prev[id].fame||0)+f) 
-              }
-          };
-      });
-  };
-  const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
-  const consumeAction = (pid) => setProvinces(prev => prev.map(p => p.id === pid ? { ...p, actionsLeft: Math.max(0, p.actionsLeft - 1) } : p));
-  
-  const getPlayerActionSource = () => provinces.find(p => p.ownerId === playerDaimyoId && p.actionsLeft > 0);
+  // --- Step 4: その他のイベントハンドラ ---
 
   const handlePauseToggle = () => setIsPaused(prev => !prev);
 
@@ -260,44 +310,6 @@ const App = () => {
           }, 500); 
       }
   };
-
-  const startNewSeason = () => {
-      checkElimination();
-
-      const isAutumn = (turn - 1) % 4 === 2;
-      setCeasefires(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(k => Object.keys(next[k]).forEach(t => { if(next[k][t]>0) next[k][t]--; }));
-          return next;
-      });
-      if (coalition) {
-          if (coalition.duration <= 1) { setCoalition(null); showLog("包囲網が解散しました。"); }
-          else setCoalition(prev => ({...prev, duration: prev.duration - 1}));
-      }
-      setProvinces(curr => curr.map(p => ({...p, actionsLeft: 3})));
-      Object.keys(DAIMYO_INFO).forEach(id => {
-          if (daimyoStats[id] && daimyoStats[id].isAlive === false) return;
-
-          const owned = provincesRef.current.filter(p => p.ownerId === id);
-          if (owned.length) {
-              const commerceIncome = Math.floor(owned.reduce((s,p)=>s+p.commerce,0) * 1.2); 
-              const agIncome = isAutumn ? Math.floor(owned.reduce((s,p)=>s+p.agriculture,0) * 2.0) : 0; 
-              updateResource(id, commerceIncome, agIncome);
-          }
-      });
-      if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
-  };
-
-  const determineTurnOrder = () => {
-      const active = Object.keys(DAIMYO_INFO).filter(id => {
-          if (id === 'Minor') return false;
-          return daimyoStats[id]?.isAlive !== false;
-      });
-      active.sort((a,b) => (daimyoStats[b]?.fame||0) - (daimyoStats[a]?.fame||0));
-      setTurnOrder(active); setCurrentTurnIndex(0);
-  };
-
-  const advanceTurn = () => { setSelectedProvinceId(null); setAttackSourceId(null); setTransportSourceId(null); setCurrentTurnIndex(prev => prev + 1); };
 
   const processNextPendingBattle = () => {
       if (pendingBattles.length === 0) {
@@ -391,7 +403,6 @@ const App = () => {
           setModalState({ type: 'reward_payment', data: { allyId: reinforcement.allyId, amount: reinforcement.cost } });
       } else {
           setModalState({ type: null }); 
-          // ★修正: 戦闘終了後、未解決戦闘がなければ処理中フラグを下ろす（useEffectで次の進行へ）
           setIsResolvingBattles(false);
       }
   };
@@ -412,15 +423,12 @@ const App = () => {
           updateRelation(allyId, -50);
       }
       setModalState({ type: null });
-      // ★修正: 報酬支払い後、戦闘処理完了としてフラグを下ろす
       setIsResolvingBattles(false);
   };
 
-  // --- 追加: 裏切り実行処理 ---
   const executeBetrayal = (targetId, sourceId) => {
       setModalState({ type: null });
       
-      // 1. 同盟破棄
       setAlliances(prev => {
           const next = { ...prev };
           if (next[playerDaimyoId]) next[playerDaimyoId] = next[playerDaimyoId].filter(id => id !== targetId);
@@ -428,11 +436,8 @@ const App = () => {
           return next;
       });
 
-      // 2. ペナルティ適用
-      // 名声 -50
       updateResource(playerDaimyoId, 0, 0, -50);
       
-      // 交渉禁止 (5年間 = 20ターン)
       setDaimyoStats(prev => ({
           ...prev,
           [playerDaimyoId]: {
@@ -441,7 +446,6 @@ const App = () => {
           }
       }));
 
-      // 民忠低下 (自国全土 -20)
       setProvinces(prev => prev.map(p => {
           if (p.ownerId === playerDaimyoId) {
               return { ...p, loyalty: Math.max(0, (p.loyalty || 50) - 20) };
@@ -451,16 +455,6 @@ const App = () => {
 
       showLog(`【裏切り】${DAIMYO_INFO[targetId].name}家との同盟を破棄し攻撃を開始しました！名声が失墜し、民忠が低下しました。`);
 
-      // 3. 戦闘開始 (選択済みのソースIDを使って)
-      const amount = modalState.data?.maxTroops || 0; // 一時保存していた兵数などがあれば使うが、ここは簡易的に
-      // 実際はTroopSelectorを経てきているはずなので、再度TroopSelectorを開くか、攻撃処理を続行する
-      // ここでは、TroopSelectorを再度開く形にする（攻撃先は確定済み）
-      // ただし、handleTroopActionを呼ぶためにはmodalStateが必要。
-      // なので、一度モーダルを閉じた後、TroopSelectorをtype='attack'で開く。
-      // しかし、handleMapSelectの時点ではまだソースも決まっていない可能性があるため、
-      // 警告 -> OK -> 通常の攻撃選択フローへ戻すのが綺麗。
-      
-      // ここでは「OK」を押したら、そのまま「部隊選択画面」に進むようにする
       const src = provinces.find(p => p.id === sourceId);
       setModalState({ 
           type: 'troop', 
@@ -519,7 +513,6 @@ const App = () => {
           const src = provinces.find(p => p.id === srcId);
           const targetProv = provinces.find(p => p.id === pid);
 
-          // ★修正: 攻撃かつ同盟国の場合、警告を表示
           if (type === 'attack') {
               const isAlly = alliances[playerDaimyoId]?.includes(targetProv.ownerId);
               if (isAlly) {
@@ -527,11 +520,10 @@ const App = () => {
                       type: 'betrayal_warning',
                       data: {
                           targetDaimyoId: targetProv.ownerId,
-                          sourceId: srcId, // ソースIDを保存しておく
+                          sourceId: srcId, 
                           targetProvinceId: pid
                       }
                   });
-                  // 選択状態はいったん解除しない（モーダルキャンセル時に戻れるように）
                   return; 
               }
           }
@@ -550,7 +542,6 @@ const App = () => {
   };
 
   const handleDiplomacy = (type, targetDaimyoId) => {
-      // ★追加: 交渉禁止期間チェック
       const banUntil = daimyoStats[playerDaimyoId]?.diplomacyBanUntil || 0;
       if (turn < banUntil) {
           return showLog(`信義を失ったため、他国は交渉に応じてくれません (残り${banUntil - turn}ターン)`);
@@ -637,10 +628,8 @@ const App = () => {
   };
 
   const exportData = () => {
-      // 一時的なプロパティ(actionsLeft)を除外して保存用データを作成
       const cleanProvinces = provinces.map(({ actionsLeft, ...rest }) => rest);
       
-      // 各都市データを1行のJSON文字列に変換し、カンマと改行で結合
       const provincesString = cleanProvinces
           .map(p => '  ' + JSON.stringify(p))
           .join(',\n');
@@ -654,7 +643,6 @@ ${provincesString}
 ];
 `;
       
-      // Blobを作成してダウンロードリンクを生成・実行
       const blob = new Blob([fileContent], { type: 'text/javascript' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -764,7 +752,6 @@ ${provincesString}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
         
-        {/* 追加: 裏切り警告モーダル */}
         {modalState.type === 'betrayal_warning' && (
             <BetrayalWarningModal 
                 targetDaimyoId={modalState.data.targetDaimyoId} 
