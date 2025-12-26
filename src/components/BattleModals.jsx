@@ -2,12 +2,78 @@
 import React from 'react';
 import { DAIMYO_INFO } from '../data/daimyos';
 
+// --- 戦術選択モーダル (新規追加) ---
+export const TacticSelectionModal = ({ attacker, defender, season, onSelect }) => {
+    const isSummer = season === '夏';
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+            <div className="bg-stone-800 border-2 border-stone-500 p-6 rounded-lg max-w-2xl w-full text-stone-100 shadow-2xl">
+                <h2 className="text-2xl font-bold mb-4 text-red-500 border-b border-stone-600 pb-2">
+                    敵軍襲来！ 戦術を選択せよ
+                </h2>
+                <div className="mb-6 flex justify-between items-end">
+                    <div>
+                        <p className="text-lg">
+                            <span className={`font-bold ${DAIMYO_INFO[attacker.ownerId]?.color || 'bg-gray-500'} px-2 py-0.5 rounded mr-2`}>
+                                {DAIMYO_INFO[attacker.ownerId]?.name || attacker.ownerId}
+                            </span>
+                            が
+                            <span className="font-bold text-yellow-400 mx-2">{defender.name}</span>
+                            へ侵攻！
+                        </p>
+                        <p className="text-sm text-stone-400 mt-1">敵兵力: {attacker.troops} vs 自軍守備兵: {defender.troops}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-stone-400 text-sm">現在の季節</p>
+                        <p className="text-xl font-bold">{season}</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    {/* 籠城ボタン */}
+                    <button 
+                        onClick={() => onSelect('siege')}
+                        className="group relative p-4 border-2 border-stone-600 rounded bg-stone-900 hover:bg-stone-700 hover:border-blue-500 transition-all flex flex-col items-center text-center"
+                    >
+                        <h3 className="text-xl font-bold text-blue-400 mb-2">籠城戦</h3>
+                        <div className="text-sm space-y-2 text-stone-300">
+                            <p>城に立てこもり徹底抗戦する。</p>
+                            <ul className="text-xs text-left bg-black/40 p-2 rounded w-full space-y-1">
+                                <li className="text-green-400">▲ 防御力が大幅に上昇 (+50)</li>
+                                <li className="text-red-400">▼ 商業収入が激減</li>
+                                {isSummer && <li className="text-red-500 font-bold">▼▼ 秋の兵糧収入が激減</li>}
+                            </ul>
+                        </div>
+                    </button>
+
+                    {/* 出城ボタン */}
+                    <button 
+                        onClick={() => onSelect('field')}
+                        className="group relative p-4 border-2 border-stone-600 rounded bg-stone-900 hover:bg-stone-700 hover:border-red-500 transition-all flex flex-col items-center text-center"
+                    >
+                        <h3 className="text-xl font-bold text-red-400 mb-2">出城迎撃</h3>
+                        <div className="text-sm space-y-2 text-stone-300">
+                            <p>城外に出て敵軍を迎え撃つ。</p>
+                            <ul className="text-xs text-left bg-black/40 p-2 rounded w-full space-y-1">
+                                <li className="text-yellow-400">▶ 防御力ボーナスなし</li>
+                                <li className="text-green-400">▶ 商業収入の減少は軽微</li>
+                                {isSummer && <li className="text-green-400">▶ 秋の兵糧収入の減少も軽微</li>}
+                            </ul>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- 援軍要請モーダル ---
 export const ReinforcementRequestModal = ({ attacker, defender, potentialAllies, relations, onConfirm }) => {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="bg-stone-800 border-2 border-red-600 p-6 rounded-lg max-w-lg w-full text-stone-100 shadow-2xl animate-fade-in">
-                <h2 className="text-2xl font-bold mb-4 text-red-500">敵襲警報！</h2>
+                <h2 className="text-2xl font-bold mb-4 text-red-500">援軍要請</h2>
                 <div className="mb-4">
                     <p className="text-lg">
                         <span className={`font-bold ${DAIMYO_INFO[attacker.ownerId]?.color || 'bg-gray-500'} px-2 py-0.5 rounded`}>
