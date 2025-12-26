@@ -1,23 +1,29 @@
 // src/data/daimyos.js
 
+export const MILITARY_SYSTEMS = {
+  separated: { name: '兵農分離', description: '金銭で兵を雇う常備兵制度。農繁期の影響を受けないが、維持費が金銭で発生する。' },
+  ichiryo: { name: '一領具足', description: '半農半兵の制度。維持費と徴兵コストが安いが、農繁期(夏・秋)に動員すると国力が疲弊する。' },
+  standard: { name: '兵農未分離', description: '一般的な徴兵制度。徴兵すると労働力不足で農業生産力が低下する。' }
+};
+
 export const DAIMYO_INFO = {
   // --- 主要大名 ---
-  Oda: { name: '織田', color: 'bg-red-600', fill: '#dc2626', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'kiyosu' },
-  Takeda: { name: '武田', color: 'bg-orange-600', fill: '#ea580c', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'kai' },
-  Uesugi: { name: '上杉', color: 'bg-blue-600', fill: '#2563eb', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'kasugayama' },
-  Hojo: { name: '北条', color: 'bg-yellow-500', fill: '#eab308', text: 'text-black', difficulty: '易', strategy: 'aggressive', targetProvince: 'umayabashi', homeProvinceId: 'odawara' },
-  Mori: { name: '毛利', color: 'bg-emerald-600', fill: '#059669', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'yoshida-koriyama' },
-  Shimazu: { name: '島津', color: 'bg-rose-900', fill: '#881337', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata', homeProvinceId: 'satsuma' },
-  Date: { name: '伊達', color: 'bg-green-600', fill: '#16a34a', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'kurokawa', homeProvinceId: 'yonezawa' },
-  Miyoshi: { name: '三好', color: 'bg-purple-500', fill: '#a855f7', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'koshimizu' },
-  Otomo: { name: '大友', color: 'bg-yellow-600', fill: '#ca8a04', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata', homeProvinceId: 'funai' },
+  Oda: { name: '織田', color: 'bg-red-600', fill: '#dc2626', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'kiyosu', militarySystem: 'separated' },
+  Takeda: { name: '武田', color: 'bg-orange-600', fill: '#ea580c', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'kai', militarySystem: 'standard' },
+  Uesugi: { name: '上杉', color: 'bg-blue-600', fill: '#2563eb', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'kasugayama', militarySystem: 'standard' },
+  Hojo: { name: '北条', color: 'bg-yellow-500', fill: '#eab308', text: 'text-black', difficulty: '易', strategy: 'aggressive', targetProvince: 'umayabashi', homeProvinceId: 'odawara', militarySystem: 'standard' },
+  Mori: { name: '毛利', color: 'bg-emerald-600', fill: '#059669', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'yoshida-koriyama', militarySystem: 'standard' },
+  Shimazu: { name: '島津', color: 'bg-rose-900', fill: '#881337', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata', homeProvinceId: 'satsuma', militarySystem: 'separated' },
+  Date: { name: '伊達', color: 'bg-green-600', fill: '#16a34a', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'kurokawa', homeProvinceId: 'yonezawa', militarySystem: 'standard' },
+  Miyoshi: { name: '三好', color: 'bg-purple-500', fill: '#a855f7', text: 'text-white', difficulty: '易', strategy: 'aggressive', targetProvince: 'kyoto', homeProvinceId: 'koshimizu', militarySystem: 'separated' },
+  Otomo: { name: '大友', color: 'bg-yellow-600', fill: '#ca8a04', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata', homeProvinceId: 'funai', militarySystem: 'separated' },
 
   // --- 実力者 ---
-  Tokugawa: { name: '松平', color: 'bg-blue-800', fill: '#1e40af', text: 'text-white', difficulty: '難', strategy: 'balanced', targetProvince: 'kyoto', homeProvinceId: 'okazaki' },
-  Imagawa: { name: '今川', color: 'bg-emerald-800', fill: '#065f46', text: 'text-white', difficulty: '中', strategy: 'balanced', targetProvince: 'kyoto', homeProvinceId: 'sunpu' },
-  Honganji: { name: '本願寺', color: 'bg-orange-300', fill: '#fdba74', text: 'text-black', difficulty: '中', strategy: 'defensive', homeProvinceId: 'ishiyama' },
-  Ryuzoji: { name: '龍造寺', color: 'bg-red-800', fill: '#991b1b', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata', homeProvinceId: 'saga' },
-  Chosokabe: { name: '長曾我部', color: 'bg-purple-700', fill: '#7e22ce', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'imabari', homeProvinceId: 'kochi' },
+  Tokugawa: { name: '松平', color: 'bg-blue-800', fill: '#1e40af', text: 'text-white', difficulty: '難', strategy: 'balanced', targetProvince: 'kyoto', homeProvinceId: 'okazaki', militarySystem: 'standard' },
+  Imagawa: { name: '今川', color: 'bg-emerald-800', fill: '#065f46', text: 'text-white', difficulty: '中', strategy: 'balanced', targetProvince: 'kyoto', homeProvinceId: 'sunpu', militarySystem: 'standard' },
+  Honganji: { name: '本願寺', color: 'bg-orange-300', fill: '#fdba74', text: 'text-black', difficulty: '中', strategy: 'defensive', homeProvinceId: 'ishiyama', militarySystem: 'ichiryo' },
+  Ryuzoji: { name: '龍造寺', color: 'bg-red-800', fill: '#991b1b', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'hakata', homeProvinceId: 'saga', militarySystem: 'standard' },
+  Chosokabe: { name: '長曾我部', color: 'bg-purple-700', fill: '#7e22ce', text: 'text-white', difficulty: '中', strategy: 'aggressive', targetProvince: 'imabari', homeProvinceId: 'kochi', militarySystem: 'ichiryo' },
   Satake: { name: '佐竹', color: 'bg-red-900', fill: '#7f1d1d', text: 'text-white', difficulty: '中', strategy: 'balanced', homeProvinceId: 'mito' },
   Ukita: { name: '宇喜多', color: 'bg-yellow-300', fill: '#fde047', text: 'text-black', difficulty: '中', strategy: 'balanced', homeProvinceId: 'okayama' },
   Rokkaku: { name: '六角', color: 'bg-indigo-400', fill: '#818cf8', text: 'text-white', difficulty: '中', strategy: 'defensive', homeProvinceId: 'azuchi' },
