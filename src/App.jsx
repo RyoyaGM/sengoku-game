@@ -1,7 +1,7 @@
+// src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
-// import { SEA_ROUTES } ... 不要になるため削除
-import { getRiceMarketPrice } from './utils/helpers'; // getFormattedDateも不要なら削除可能(GameLoopで使ってるので)
+import { getRiceMarketPrice, getFormattedDate } from './utils/helpers'; // getFormattedDateを追加
 import { 
   INITIAL_RESOURCES, 
   INITIAL_ALLIANCES, 
@@ -21,7 +21,7 @@ import {
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal 
 } from './components/Modals';
 import { 
-  ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal 
+  ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal, TacticSelectionModal // ★追加
 } from './components/BattleModals';
 
 // Hooks
@@ -29,7 +29,7 @@ import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
 import { usePlayerActions } from './hooks/usePlayerActions';
 import { useGameLoop } from './hooks/useGameLoop';
-import { useMapControls } from './hooks/useMapControls'; // ★追加
+import { useMapControls } from './hooks/useMapControls';
 
 const App = () => {
   // --- Game State ---
@@ -68,7 +68,6 @@ const App = () => {
   useEffect(() => { ceasefiresRef.current = ceasefires; }, [ceasefires]);
   useEffect(() => { daimyoStatsRef.current = daimyoStats; }, [daimyoStats]);
 
-  // --- Helper Functions ---
   const updateResource = (id, g, r, f=0, d=0) => {
       setDaimyoStats(prev => {
           if (!prev[id]) return prev; 
@@ -86,13 +85,11 @@ const App = () => {
 
   const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
 
-  // --- 1. Map Controls Hook (★追加) ---
   const {
       mapTransform, isDragging, isEditMode, setIsEditMode, setDraggingProvinceId,
       handleWheel, handleMouseDown, handleGlobalMouseMove, handleMouseUp, exportData
   } = useMapControls({ provinces, setProvinces });
 
-  // --- 2. GameLoop Hook ---
   const {
       turn, setTurn, gameState, turnOrder, currentTurnIndex, isPlayerTurn, setIsPlayerTurn,
       advanceTurn, startNewSeason, showLog
@@ -103,16 +100,16 @@ const App = () => {
       setLogs, setLastLog
   });
 
-  // --- 3. BattleSystem Hook ---
   const { 
       pendingBattles, setPendingBattles, processNextPendingBattle, 
-      handleReinforcementDecision, handleBattleFinish, handleRewardPayment 
+      handleReinforcementDecision, handleBattleFinish, handleRewardPayment,
+      handleTacticSelection // ★追加
   } = useBattleSystem({
       provinces, setProvinces, relations, updateResource, updateRelation, showLog,
-      advanceTurn, playerDaimyoId, daimyoStats, modalState, setModalState, setIsResolvingBattles
+      advanceTurn, playerDaimyoId, daimyoStats, modalState, setModalState, setIsResolvingBattles,
+      turn // ★追加
   });
 
-  // --- 4. PlayerActions Hook ---
   const { 
       handleDomesticAction, handleMilitaryAction, handleDiplomacy, handleTroopAction, executeBetrayal 
   } = usePlayerActions({
@@ -121,14 +118,12 @@ const App = () => {
       setTransportSourceId, selectedProvinceId, modalState
   });
 
-  // --- 5. AiSystem Hook ---
   const { processAiTurn } = useAiSystem({
       provincesRef, daimyoStatsRef, alliancesRef, ceasefiresRef, relations, setProvinces,
       updateResource, setPendingBattles, showLog, advanceTurn, playerDaimyoId, turn,
       isPaused, aiSpeed
   });
 
-  // --- Event Loop Effect ---
   useEffect(() => {
       if (turnOrder.length === 0 || currentTurnIndex === -1 || isResolvingBattles) return;
       
@@ -156,7 +151,6 @@ const App = () => {
       }
   }, [currentTurnIndex, turnOrder, isPaused, pendingBattles.length, isResolvingBattles]); 
 
-  // --- Other Handlers ---
   const handlePauseToggle = () => setIsPaused(prev => !prev);
 
   const handleEventDecision = (event, choice) => {
@@ -237,7 +231,6 @@ const App = () => {
             {isEditMode && (<button onClick={exportData} className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white">データ出力(保存)</button>)}
         </div>
 
-        {/* マップ描画エリア: イベントハンドラをHookから適用 */}
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={handleMouseDown}
              onMouseMove={handleGlobalMouseMove} 
@@ -259,7 +252,6 @@ const App = () => {
             </div>
         </div>
 
-        {/* --- Modals and Panels --- */}
         {selectedProvinceId && (
             <ProvincePopup 
                 selectedProvince={selectedProvinceId ? provinces.find(p => p.id === selectedProvinceId) : null}
@@ -289,7 +281,16 @@ const App = () => {
             currentDaimyoId={currentDaimyoId} isPaused={isPaused}
         />
         
-        {/* その他のモーダル群（変更なし） */}
+        {/* モーダル表示部分 */}
+        {modalState.type === 'tactic_selection' && ( // ★追加
+            <TacticSelectionModal 
+                attacker={modalState.data.battle.attacker}
+                defender={modalState.data.battle.defender}
+                season={getFormattedDate(turn).split(' ')[1]} // "1560年 夏" -> "夏"
+                onSelect={handleTacticSelection}
+            />
+        )}
+        
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
         
