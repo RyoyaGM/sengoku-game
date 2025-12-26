@@ -20,7 +20,6 @@ export const useGameLoop = ({
     setSelectedProvinceId,
     setAttackSourceId,
     setTransportSourceId,
-    // ログ管理用のSetterを受け取る
     setLogs,
     setLastLog
 }) => {
@@ -30,7 +29,6 @@ export const useGameLoop = ({
     const [currentTurnIndex, setCurrentTurnIndex] = useState(-1);
     const [isPlayerTurn, setIsPlayerTurn] = useState(false);
 
-    // --- ログ機能の定義 (ここで定義することでturnを直接参照できる) ---
     const showLog = (text) => {
         setLastLog(text);
         setLogs(prev => {
@@ -40,7 +38,6 @@ export const useGameLoop = ({
         });
     };
 
-    // --- ターン進行の基本アクション ---
     const advanceTurn = () => {
         setSelectedProvinceId(null);
         setAttackSourceId(null);
@@ -48,7 +45,6 @@ export const useGameLoop = ({
         setCurrentTurnIndex(prev => prev + 1);
     };
 
-    // --- 勢力滅亡判定 ---
     const checkElimination = () => {
         setDaimyoStats(prev => {
             let hasChange = false;
@@ -65,7 +61,6 @@ export const useGameLoop = ({
         });
     };
 
-    // --- 行動順決定 ---
     const determineTurnOrder = () => {
         const active = Object.keys(DAIMYO_INFO).filter(id => {
             if (id === 'Minor') return false;
@@ -77,11 +72,11 @@ export const useGameLoop = ({
         setCurrentTurnIndex(0);
     };
 
-    // --- 季節更新・収入処理 ---
     const startNewSeason = () => {
         checkElimination();
 
-        const isAutumn = (turn - 1) % 4 === 2;
+        const seasonIndex = (turn - 1) % 4; // 0:春, 1:夏, 2:秋, 3:冬
+        const isAutumn = seasonIndex === 2;
         
         setCeasefires(prev => {
             const next = { ...prev };
@@ -98,33 +93,77 @@ export const useGameLoop = ({
             }
         }
 
-        setProvinces(curr => curr.map(p => ({ ...p, actionsLeft: 3 })));
+        // --- ダメージリセット用のマップ作成準備 ---
+        // 収入計算後に battleDamage をクリアするため、ここでは計算ロジック内で参照する
+        
+        setProvinces(curr => {
+            // アクション回復 & ダメージリセット（収入計算前にダメージ情報は取得したいので、ここではリセット予約）
+            // 実際は updateResource で計算するので、ここでは actionsLeft の回復とダメージ情報の消去を行う
+            // ただし、updateResourceは非同期ではないが、setProvinces内で行うのは不適切。
+            // 先に計算してから setProvinces で消去する流れにする。
+            
+            // ここでは一旦そのまま返す(actionsLeftのみ更新)、計算は下で行う
+            return curr.map(p => ({ ...p, actionsLeft: 3 }));
+        });
 
+        // --- 収入計算 & ダメージ適用 ---
         Object.keys(DAIMYO_INFO).forEach(id => {
             const stats = daimyoStatsRef.current[id];
             if (stats && stats.isAlive === false) return;
 
             const owned = provincesRef.current.filter(p => p.ownerId === id);
             if (owned.length) {
-                const commerceIncome = Math.floor(owned.reduce((s, p) => s + p.commerce, 0) * 1.2);
-                const agIncome = isAutumn ? Math.floor(owned.reduce((s, p) => s + p.agriculture, 0) * 2.0) : 0;
+                let totalComm = 0;
+                let totalAgri = 0;
+
+                owned.forEach(p => {
+                    let comm = p.commerce;
+                    let agri = isAutumn ? p.agriculture : 0;
+
+                    // ★戦闘ダメージ適用
+                    if (p.battleDamage) {
+                        const { commerce: commRate, agriculture: agriRate, seasonCheck, tactic } = p.battleDamage;
+                        
+                        // 商業: 常に減少
+                        const commDmg = Math.floor(comm * commRate);
+                        comm -= commDmg;
+
+                        // 農業: 秋のみ減少計算
+                        if (isAutumn) {
+                            // 夏(1)に攻められた場合、または秋(2)当期に攻められた場合
+                            // 要件:「夏に攻められている場合は秋の兵糧収入が激減」
+                            if (seasonCheck === 1 || seasonCheck === 2) {
+                                const agriDmg = Math.floor(agri * agriRate);
+                                agri -= agriDmg;
+                                if (id === playerDaimyoId && agriDmg > 0) {
+                                    showLog(`${p.name}: 戦火により兵糧収入減 (戦術:${tactic==='siege'?'籠城':'出城'})`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    totalComm += comm;
+                    totalAgri += agri;
+                });
+
+                const commerceIncome = Math.floor(totalComm * 1.2);
+                const agIncome = Math.floor(totalAgri * 2.0);
                 updateResource(id, commerceIncome, agIncome);
             }
         });
 
+        // 最後にダメージ情報をクリア
+        setProvinces(curr => curr.map(p => ({ ...p, battleDamage: null })));
+
         if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
     };
 
-    // --- 勝敗判定監視 ---
     useEffect(() => {
         checkElimination();
-
         if (!playerDaimyoId || playerDaimyoId === 'SPECTATOR') return;
-
         const stats = daimyoStatsRef.current;
         const playerStats = stats[playerDaimyoId];
         const playerCount = provincesRef.current.filter(p => p.ownerId === playerDaimyoId).length;
-
         if (playerCount === provincesRef.current.length) {
             setGameState('won');
         } else if ((playerStats && playerStats.isAlive === false) || (playerCount === 0 && turn > 0)) {
@@ -132,16 +171,13 @@ export const useGameLoop = ({
         }
     }, [provincesRef.current, daimyoStatsRef.current, playerDaimyoId]);
 
-    // --- ゲーム開始時の初期化 ---
     useEffect(() => {
         if (playerDaimyoId && turnOrder.length === 0) startNewSeason();
     }, [playerDaimyoId]);
 
-    // --- ターン経過イベント (歴史イベントなど) ---
     useEffect(() => {
         if (turn > 1) {
             showLog(`${getFormattedDate(turn)}になりました。`);
-
             const occurredEvent = HISTORICAL_EVENTS.find(e => e.trigger(turn, provincesRef.current, daimyoStatsRef.current));
             if (occurredEvent) {
                 setModalState({ type: 'historical_event', data: occurredEvent });
@@ -161,6 +197,6 @@ export const useGameLoop = ({
         setIsPlayerTurn,
         advanceTurn,
         startNewSeason,
-        showLog // ★ここで定義したshowLogを返す
+        showLog
     };
 };
