@@ -1,3 +1,5 @@
+// src/data/events/matsudairaIndependence.js
+
 // --- ヘルパー関数 ---
 
 const resolveMatsudairaIndependence = (ctx, isPlayerTokugawa) => {
@@ -48,7 +50,8 @@ const resolveMatsudairaIndependence = (ctx, isPlayerTokugawa) => {
 
     ctx.setProvinces(prev => {
         const okazaki = prev.find(p => p.id === 'okazaki');
-        const moveTroops = okazaki ? Math.max(0, okazaki.troops - 150) : 0;
+        // ★修正: (岡崎の兵数 - 200) / 2 を駿府へ移動
+        const moveTroops = okazaki ? Math.floor(Math.max(0, okazaki.troops - 200) / 2) : 0;
         
         const chita = prev.find(p => p.id === 'chita');
         const chitaTroops = chita ? chita.troops : 0;
@@ -59,7 +62,7 @@ const resolveMatsudairaIndependence = (ctx, isPlayerTokugawa) => {
                 return { 
                     ...p, 
                     ownerId: 'Tokugawa', 
-                    troops: 200, 
+                    troops: 200, // 独立後は200になる
                     loyalty: 100,
                     training: Math.min(100, (p.training || 50) + 20)
                 };
@@ -142,19 +145,19 @@ export const matsudairaIndependenceEvent = {
                 text: '討伐令を出す',
                 description: '裏切りは許さぬ。断固として戦う姿勢を示す。',
                 resolve: (ctx) => {
-                     ctx.showLog("今川家は松平元康に対し討伐令を出しました！関係が「敵対」になります。");
-                     ctx.setRelations(prev => ({
+                      ctx.showLog("今川家は松平元康に対し討伐令を出しました！関係が「敵対」になります。");
+                      ctx.setRelations(prev => ({
                         ...prev,
                         Imagawa: { ...(prev.Imagawa || {}), Tokugawa: 0 },
                         Tokugawa: { ...(prev.Tokugawa || {}), Imagawa: 0 }
-                     }));
-                     ctx.setAlliances(prev => {
+                      }));
+                      ctx.setAlliances(prev => {
                         const next = { ...prev };
                         if (next['Imagawa']) next['Imagawa'] = next['Imagawa'].filter(id => id !== 'Tokugawa');
                         if (next['Tokugawa']) next['Tokugawa'] = next['Tokugawa'].filter(id => id !== 'Imagawa');
                         return next;
-                     });
-                     return null;
+                      });
+                      return null;
                 }
             }
         ]

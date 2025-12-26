@@ -1,3 +1,5 @@
+// src/data/events/enshuRebellion.js
+
 export const enshuRebellionEvent = {
     id: 'enshu_so_geki',
     title: '遠州忩劇',
@@ -17,9 +19,11 @@ export const enshuRebellionEvent = {
         ctx.setProvinces(prev => prev.map(p => {
             if (p.ownerId === 'Imagawa') {
                 if (p.id !== 'sunpu') {
+                    // ★修正: 兵力40%まで削減、ただし最低120は残す
+                    const newTroops = Math.max(120, Math.floor(p.troops * 0.4));
                     return { 
                         ...p, 
-                        troops: Math.floor(p.troops * 0.7), 
+                        troops: newTroops, 
                         loyalty: Math.max(0, (p.loyalty || 50) - 30) 
                     };
                 }

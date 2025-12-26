@@ -1,3 +1,5 @@
+// src/data/events/okehazama.js
+
 import okehazamaHyojoImg from '../../assets/okehazama_hyojo.jpg';
 import okehazamaMarchImg from '../../assets/okehazama_march.jpg';
 import okehazamaSuccessImg from '../../assets/okehazama_success.jpg';
@@ -111,7 +113,9 @@ const resolveOdaVictory = (ctx, isAuto = false) => {
     
     ctx.setProvinces(prev => prev.map(p => {
         if (p.ownerId === 'Imagawa') {
-            return { ...p, troops: Math.floor(p.troops * 0.5), loyalty: Math.max(0, p.loyalty - 15) };
+            // ★修正: 兵力30%まで削減、ただし最低150は残す（即死防止）
+            const newTroops = Math.max(150, Math.floor(p.troops * 0.3));
+            return { ...p, troops: newTroops, loyalty: Math.max(0, p.loyalty - 15) };
         }
         return p;
     }));
@@ -147,7 +151,9 @@ const resolveImagawaDefeat = (ctx) => {
     ctx.updateResource('Imagawa', -500, -500, -50);
     ctx.setProvinces(prev => prev.map(p => {
         if (p.ownerId === 'Imagawa') {
-            return { ...p, troops: Math.floor(p.troops * 0.5), loyalty: Math.max(0, p.loyalty - 15) };
+            // ★修正: 兵力30%まで削減、ただし最低150は残す
+            const newTroops = Math.max(150, Math.floor(p.troops * 0.3));
+            return { ...p, troops: newTroops, loyalty: Math.max(0, p.loyalty - 15) };
         }
         return p;
     }));
