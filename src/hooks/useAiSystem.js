@@ -32,6 +32,9 @@ export const useAiSystem = ({
             const daimyoInfo = DAIMYO_INFO[aiId] || { strategy: 'balanced', targetProvince: null, homeProvinceId: null, name: aiId };
             const strategy = daimyoInfo.strategy || 'balanced';
 
+            const daimyoStats = daimyoStatsRef.current[aiId];
+            const isConfused = daimyoStats && daimyoStats.confusionTurns > 0;
+
             const homeProvinceId = daimyoInfo.homeProvinceId;
             const homeProvData = homeProvinceId ? next.find(p => p.id === homeProvinceId) : null;
             const isHomeLost = homeProvData && homeProvData.ownerId !== aiId;
@@ -45,13 +48,11 @@ export const useAiSystem = ({
             };
             const prm = params[strategy] || params.balanced;
 
-            // AIの各拠点で行動決定
             const myProvinces = next.filter(p => p.ownerId === aiId);
             if (myProvinces.length === 0) return next;
 
             myProvinces.forEach(p => {
                 while (p.actionsLeft > 0) {
-                    // ★コスト取得 (季節・制度補正済み)
                     const getCost = (type) => getActionCost(type, COSTS[type], turn, aiId);
 
                     const neighbors = p.neighbors.map(nid => next.find(x => x.id === nid)).filter(n => n);
@@ -71,15 +72,13 @@ export const useAiSystem = ({
                     const totalAttackRice = attackCost.rice + carryRice;
 
                     let target = null;
-                    if (isFrontline && p.troops > 300 && p.rice >= totalAttackRice && p.gold >= attackCost.gold) {
-                        // ターゲット選定（簡易版: 一番弱い敵）
+                    if (!isConfused && isFrontline && p.troops > 300 && p.rice >= totalAttackRice && p.gold >= attackCost.gold) {
                         const potentialTargets = enemies.filter(e => e.troops < attackTroops);
                         if (potentialTargets.length > 0) {
                             target = potentialTargets.sort((a, b) => a.troops - b.troops)[0];
                         }
                     }
 
-                    // アイヌの特殊条件
                     if (aiId === 'Ainu' && target) {
                         const rel = relations[aiId]?.[target.ownerId] ?? 50;
                         if (rel > 20) target = null;
@@ -97,44 +96,44 @@ export const useAiSystem = ({
                             });
                             p.troops -= attackTroops;
                         } else {
-                            // AI同士の戦闘（簡易解決）
+                            // AI同士の簡易戦闘
                             let atk = attackTroops;
                             let def = target.troops;
                             p.troops -= atk; 
 
-                            // 損耗計算
                             while(atk > 0 && def > 0) {
                                 atk -= Math.floor(def * 0.1);
                                 def -= Math.floor(atk * 0.15);
                             }
 
                             if (def <= 0) {
-                                // 勝利
                                 const oldOwner = target.ownerId;
                                 target.ownerId = aiId; 
                                 target.troops = Math.max(1, atk); 
                                 target.actionsLeft = 0;
-                                target.gold = Math.floor(target.gold * 0.5); // 略奪
+                                target.gold = Math.floor(target.gold * 0.5);
                                 target.rice = Math.floor(target.rice * 0.5);
                                 
                                 const daimyoName = DAIMYO_INFO[aiId]?.name || aiId;
                                 showLog(`${daimyoName}が${target.name}を制圧！`);
-                                updateResource(aiId, 0, 0, 5); // 名声アップ
+                                updateResource(aiId, 0, 0, 5);
                                 setTimeout(() => updateResource(oldOwner, 0, 0, -5), 0);
                             } else {
-                                // 敗北・撤退
                                 target.troops = def;
-                                p.troops += Math.max(0, Math.floor(atk * 0.5)); // 生還
+                                p.troops += Math.max(0, Math.floor(atk * 0.5));
                             }
                         }
                         continue;
                     }
 
-                    // --- 内政・徴兵 ---
+                    // --- 内政・徴兵・資金活用 ---
                     const recruitCost = getCost('recruit');
                     const devCost = getCost('develop');
                     
-                    // 徴兵
+                    // 変動コストの計算 (現在値の半分を加算)
+                    const realDevCostGold = devCost.gold + Math.floor(p.commerce * 0.5);
+
+                    // 1. 徴兵
                     if (isFrontline && p.troops < prm.recruitThreshold && p.gold >= recruitCost.gold && p.rice >= recruitCost.rice) {
                         p.gold -= recruitCost.gold; 
                         p.rice -= recruitCost.rice;
@@ -143,15 +142,30 @@ export const useAiSystem = ({
                         continue;
                     }
 
-                    // 商業開発
-                    if (p.gold >= devCost.gold + prm.goldReserve) {
-                        p.gold -= devCost.gold;
+                    // 2. 商業開発 (上限チェックとコスト計算)
+                    if (p.commerce < p.maxCommerce && p.gold >= realDevCostGold + prm.goldReserve) {
+                        p.gold -= realDevCostGold;
                         p.commerce += COSTS.develop.boost;
                         p.actionsLeft--;
                         continue;
                     }
 
-                    // 何もしない
+                    // 3. 余剰資金の活用 (米購入 & 防御強化)
+                    if (p.gold > 1000) {
+                        // 金100で米80を買う (簡易トレード)
+                        p.gold -= 100;
+                        p.rice += 80;
+                        
+                        // 防御も上げる
+                        if (p.defense < 150) {
+                            p.gold -= 50; // コスト
+                            p.defense += 5;
+                        }
+                        p.actionsLeft--;
+                        continue;
+                    }
+
+                    // 行動力消費して終了
                     p.actionsLeft = 0;
                 }
             });

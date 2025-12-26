@@ -93,6 +93,37 @@ export const useGameLoop = ({
             }
         }
 
+        // --- ペナルティ期間の更新 ---
+        setDaimyoStats(prev => {
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(next).forEach(id => {
+                const stats = next[id];
+                // 外交全般禁止カウント
+                if (stats.diplomacyPenalty > 0) {
+                    stats.diplomacyPenalty--;
+                    changed = true;
+                    if (stats.diplomacyPenalty === 0 && id === playerDaimyoId) {
+                        showLog("外交への信頼が多少回復しました。交渉が可能になります。");
+                    }
+                }
+                // 停戦交渉禁止カウント
+                if (stats.ceasefirePenalty > 0) {
+                    stats.ceasefirePenalty--;
+                    changed = true;
+                }
+                // ★追加: 混乱（攻撃禁止）カウント
+                if (stats.confusionTurns > 0) {
+                    stats.confusionTurns--;
+                    changed = true;
+                    if (stats.confusionTurns === 0 && id === playerDaimyoId) {
+                        showLog("家の混乱が収まり、軍事行動が可能になりました。");
+                    }
+                }
+            });
+            return changed ? next : prev;
+        });
+
         // --- 収入・維持費計算 (拠点独立採算) ---
         setProvinces(curr => curr.map(p => {
             const daimyoId = p.ownerId;

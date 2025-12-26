@@ -20,19 +20,29 @@ export const usePlayerActions = ({
     setTransportSourceId,
     selectedProvinceId,
     modalState,
-    setPendingBattles // ★追加: 戦闘発生のために必要
+    setPendingBattles,
+    setRelations
 }) => {
 
-    const checkAndConsumeCost = (province, baseCost, actionType) => {
-        const realCost = getActionCost(actionType, baseCost, turn, playerDaimyoId);
-        if (province.gold < realCost.gold || province.rice < realCost.rice) {
-            showLog(`資金または兵糧が不足しています (必要: 金${realCost.gold}/米${realCost.rice})`);
-            return null;
+    // ★修正: コスト計算に「現在値による変動」を追加
+    // province引数がnullの場合や、変動コストがないコマンドはbaseCostのみ返す
+    const calculateDynamicCost = (province, baseCost, actionType) => {
+        let additionalGold = 0;
+
+        // 商業・農業開発は、発展しているほど金がかかる（インフレ抑制）
+        if (actionType === 'develop' && province) {
+            // 現在の商業値 * 0.5 を追加コストとする
+            additionalGold = Math.floor(province.commerce * 0.5);
+        } else if (actionType === 'cultivate' && province) {
+            additionalGold = Math.floor(province.agriculture * 0.5);
         }
+
+        const seasonWeightedCost = getActionCost(actionType, baseCost, turn, playerDaimyoId);
+        
         return {
-            gold: province.gold - realCost.gold,
-            rice: province.rice - realCost.rice,
-            actionCost: realCost.action
+            ...seasonWeightedCost,
+            gold: seasonWeightedCost.gold + additionalGold,
+            baseActionCost: seasonWeightedCost.action // 行動力コスト
         };
     };
 
@@ -43,22 +53,37 @@ export const usePlayerActions = ({
             return;
         }
 
-        const costResult = checkAndConsumeCost(p, COSTS[type], type);
-        if (!costResult && COSTS[type].action > 0) return; 
+        // ★追加: 開発限界のチェック
+        if (type === 'develop' && p.commerce >= p.maxCommerce) {
+            showLog(`これ以上の商業発展は望めません（最大: ${p.maxCommerce}）。`);
+            return;
+        }
+        if (type === 'cultivate' && p.agriculture >= p.maxAgriculture) {
+            showLog(`これ以上の開墾は困難です（最大: ${p.maxAgriculture}）。`);
+            return;
+        }
+
+        // 変動コストの計算と消費
+        const realCost = calculateDynamicCost(p, COSTS[type], type);
+        
+        if (p.gold < realCost.gold || p.rice < realCost.rice) {
+            showLog(`資金または兵糧が不足しています (必要: 金${realCost.gold}/米${realCost.rice})`);
+            return;
+        }
 
         setProvinces(prev => prev.map(pr => {
             if (pr.id === pid) {
                 let updates = { 
                     ...pr, 
                     actionsLeft: pr.actionsLeft - (COSTS[type].action || 0),
-                    gold: costResult ? costResult.gold : pr.gold,
-                    rice: costResult ? costResult.rice : pr.rice
+                    gold: pr.gold - realCost.gold,
+                    rice: pr.rice - realCost.rice
                 };
 
-                if (type === 'develop') updates.commerce += COSTS.develop.boost;
-                if (type === 'cultivate') updates.agriculture += COSTS.cultivate.boost;
+                if (type === 'develop') updates.commerce = Math.min(pr.maxCommerce, pr.commerce + COSTS.develop.boost);
+                if (type === 'cultivate') updates.agriculture = Math.min(pr.maxAgriculture, pr.agriculture + COSTS.cultivate.boost);
                 if (type === 'pacify') updates.loyalty = Math.min(100, pr.loyalty + COSTS.pacify.boost);
-                if (type === 'fortify') updates.defense = Math.min(100, pr.defense + COSTS.fortify.boost);
+                if (type === 'fortify') updates.defense = Math.min(200, pr.defense + COSTS.fortify.boost); // 防御上限は高めに
                 if (type === 'market') {
                     if (updates.rice >= 100) {
                          updates.rice -= 100;
@@ -68,13 +93,22 @@ export const usePlayerActions = ({
                         showLog("売るための兵糧が足りません。");
                         return pr;
                     }
+                } else if (type === 'trade') {
+                    // ★追加: 米購入コマンド（tradeを米購入として実装する場合）
+                    if (updates.gold >= 100) {
+                        updates.gold -= 100;
+                        updates.rice += 80; // 簡易レート
+                        showLog("商人から兵糧を購入しました。");
+                    }
                 }
                 return updates;
             }
             return pr;
         }));
         
-        if (type !== 'market') showLog(`${DAIMYO_INFO[playerDaimyoId].name}: 内政(${type})を実行しました。`);
+        if (type !== 'market' && type !== 'trade') {
+            showLog(`${DAIMYO_INFO[playerDaimyoId].name}: 内政(${type})を実行。金${realCost.gold}消費。`);
+        }
     };
 
     const handleMilitaryAction = (type, pid) => {
@@ -89,7 +123,9 @@ export const usePlayerActions = ({
         const season = getSeason(turn);
         const isBusySeason = season === 'summer' || season === 'autumn';
 
-        // --- 強制徴兵 ---
+        // 軍事アクションもコスト計算関数を通す（季節補正など）
+        const realCost = calculateDynamicCost(p, COSTS[type] || { gold: 0, rice: 0, action: 1 }, type);
+
         if (type === 'forced_recruit') {
             setProvinces(prev => prev.map(pr => {
                 if (pr.id === pid) {
@@ -107,16 +143,18 @@ export const usePlayerActions = ({
             return;
         }
 
-        // --- 通常徴兵 ---
+        // コストチェック（強制徴兵以外）
+        if (p.gold < realCost.gold || p.rice < realCost.rice) {
+            showLog(`軍資金または兵糧が不足しています。`);
+            return;
+        }
+
         if (type === 'recruit') {
             const capacity = getTroopCapacity(p);
             if (p.troops >= capacity) {
-                showLog(`これ以上徴兵できません(軍役上限:${capacity})。内政を行ってください。`);
+                showLog(`これ以上徴兵できません(軍役上限:${capacity})。`);
                 return;
             }
-
-            const costResult = checkAndConsumeCost(p, COSTS.recruit, type);
-            if (!costResult) return;
 
             let agriPenalty = 5;
             if (system === 'separated') agriPenalty = 0; 
@@ -126,8 +164,8 @@ export const usePlayerActions = ({
                 if (pr.id === pid) {
                     return {
                         ...pr,
-                        gold: costResult.gold,
-                        rice: costResult.rice,
+                        gold: pr.gold - realCost.gold,
+                        rice: pr.rice - realCost.rice,
                         troops: pr.troops + COSTS.recruit.troops,
                         agriculture: Math.max(0, pr.agriculture - agriPenalty),
                         actionsLeft: pr.actionsLeft - 1
@@ -135,11 +173,10 @@ export const usePlayerActions = ({
                 }
                 return pr;
             }));
-            showLog(`徴兵を実行。兵数+${COSTS.recruit.troops} (農業-${agriPenalty})`);
+            showLog(`徴兵を実行。兵数+${COSTS.recruit.troops}`);
             return;
         }
 
-        // --- 移動・攻撃 (兵糧携行チェック) ---
         if (type === 'attack' || type === 'move') {
             if (system === 'ichiryo' && isBusySeason) {
                 const confirmMsg = "【警告】一領具足：農繁期に軍を動かすと、領内の農業が荒廃します。実行しますか？";
@@ -153,13 +190,16 @@ export const usePlayerActions = ({
             return;
         }
 
-        // 訓練
         if (type === 'train') {
-            const costResult = checkAndConsumeCost(p, COSTS.train, type);
-            if (!costResult) return;
             setProvinces(prev => prev.map(pr => {
                 if (pr.id === pid) {
-                    return { ...pr, gold: costResult.gold, rice: costResult.rice, training: Math.min(100, pr.training + 5), actionsLeft: pr.actionsLeft - 1 };
+                    return { 
+                        ...pr, 
+                        gold: pr.gold - realCost.gold, 
+                        rice: pr.rice - realCost.rice, 
+                        training: Math.min(100, pr.training + 5), 
+                        actionsLeft: pr.actionsLeft - 1 
+                    };
                 }
                 return pr;
             }));
@@ -167,23 +207,55 @@ export const usePlayerActions = ({
         }
     };
 
-    const handleTroopAction = (amount) => {
+    const handleTroopAction = (input, ceasefires) => {
+        let amount = 0;
+        let goldAmount = 0;
+        let riceAmount = 0;
+
+        if (typeof input === 'object') {
+            amount = input.troops || 0;
+            goldAmount = input.gold || 0;
+            riceAmount = input.rice || 0;
+        } else {
+            amount = input;
+        }
+
         const { type, sourceId, targetId } = modalState.data;
         const src = provinces.find(p => p.id === sourceId);
+        const tgt = provinces.find(p => p.id === targetId);
         
-        // 兵糧携行ロジック
         const carryRice = Math.floor(amount * 0.5); 
         const baseActionCost = COSTS[type];
-        const realCost = getActionCost(type, baseActionCost, turn, playerDaimyoId);
-        const totalRiceNeeded = realCost.rice + carryRice;
+        const realCost = calculateDynamicCost(src, baseActionCost, type);
+        
+        const totalRiceNeeded = realCost.rice + carryRice + riceAmount;
+        const totalGoldNeeded = realCost.gold + goldAmount;
 
-        if (src.gold < realCost.gold || src.rice < totalRiceNeeded) {
-            showLog(`軍資金または兵糧が不足しています (必要: 金${realCost.gold}/米${totalRiceNeeded} 内携行${carryRice})`);
+        if (src.gold < totalGoldNeeded || src.rice < totalRiceNeeded) {
+            showLog(`軍資金または兵糧が不足しています。`);
             setModalState({ type: null });
             return;
         }
 
-        // 一領具足ペナルティ
+        if (type === 'attack') {
+            const isAllied = alliances[playerDaimyoId]?.includes(tgt.ownerId);
+            const isCeasefire = (ceasefires || {})[playerDaimyoId]?.[tgt.ownerId] > 0;
+            
+            if (isAllied || isCeasefire) {
+                setModalState({ 
+                    type: 'betrayal_warning', 
+                    data: { 
+                        targetDaimyoId: tgt.ownerId, 
+                        sourceId: sourceId, 
+                        targetProvinceId: targetId,
+                        amount: amount,
+                        isCeasefire: isCeasefire 
+                    } 
+                });
+                return;
+            }
+        }
+
         const daimyo = DAIMYO_INFO[playerDaimyoId];
         const system = daimyo?.militarySystem || 'standard';
         const season = getSeason(turn);
@@ -199,7 +271,7 @@ export const usePlayerActions = ({
             if (p.id === sourceId) {
                 return {
                     ...p,
-                    gold: p.gold - realCost.gold,
+                    gold: p.gold - totalGoldNeeded,
                     rice: p.rice - totalRiceNeeded,
                     troops: p.troops - amount,
                     agriculture: Math.max(0, p.agriculture - agriDamage),
@@ -207,7 +279,12 @@ export const usePlayerActions = ({
                 };
             }
             if (type === 'transport' && p.id === targetId) {
-                return { ...p, troops: p.troops + amount };
+                return { 
+                    ...p, 
+                    troops: p.troops + amount,
+                    gold: p.gold + goldAmount,
+                    rice: p.rice + riceAmount
+                };
             }
             return p;
         }));
@@ -217,34 +294,111 @@ export const usePlayerActions = ({
         setTransportSourceId(null);
 
         if (type === 'attack') {
-            const defender = provinces.find(p => p.id === targetId);
              setPendingBattles(prev => [...prev, {
                 attacker: { ...src, troops: amount }, 
-                defender: defender,
+                defender: tgt,
                 attackerAmount: amount,
                 attackerId: src.ownerId,
-                defenderId: defender.ownerId
+                defenderId: tgt.ownerId
             }]);
         } else {
-            showLog(`${amount}の兵を輸送しました。(携行兵糧:${carryRice})`);
+            showLog(`輸送を実行しました。`);
         }
     };
 
     const handleDiplomacy = (type, targetId) => {
-       showLog("外交機能は拠点リソース化に伴い調整中です。");
+       const stats = daimyoStats[playerDaimyoId];
+       if (stats.diplomacyPenalty > 0) {
+           showLog(`【外交停止中】裏切り行為により、他国は交渉に応じてくれません。`);
+           return;
+       }
+       if (type === 'ceasefire' && stats.ceasefirePenalty > 0) {
+           showLog(`【信用失墜】停戦を破った過去があるため、相手は停戦に応じてくれません。`);
+           return;
+       }
+       showLog("外交機能は調整中です。");
     };
     
-    const executeBetrayal = (targetDaimyoId, sourceId) => {
+    const executeBetrayal = (targetDaimyoId, sourceId, targetProvinceId, amount, isCeasefireBroken) => {
         setAlliances(prev => {
             const next = { ...prev };
             if (next[playerDaimyoId]) next[playerDaimyoId] = next[playerDaimyoId].filter(id => id !== targetDaimyoId);
             if (next[targetDaimyoId]) next[targetDaimyoId] = next[targetDaimyoId].filter(id => id !== playerDaimyoId);
             return next;
         });
-        updateResource(playerDaimyoId, 0, 0, -50); 
-        setAttackSourceId(sourceId);
-        showLog("同盟を破棄しました！名声が低下しました。");
+
+        setDaimyoStats(prev => ({
+            ...prev,
+            [playerDaimyoId]: {
+                ...prev[playerDaimyoId],
+                fame: Math.max(0, (prev[playerDaimyoId].fame || 0) - 100),
+                diplomacyPenalty: 20, 
+                ceasefirePenalty: isCeasefireBroken ? 40 : prev[playerDaimyoId].ceasefirePenalty
+            }
+        }));
+
+        const myProvinces = provinces.filter(p => p.ownerId === playerDaimyoId);
+        const neighbors = new Set();
+        myProvinces.forEach(p => {
+            p.neighbors.forEach(nid => {
+                const n = provinces.find(prov => prov.id === nid);
+                if (n && n.ownerId !== playerDaimyoId && n.ownerId !== 'Minor') {
+                    neighbors.add(n.ownerId);
+                }
+            });
+        });
+
+        setRelations(prev => {
+            const next = { ...prev };
+            const myRels = { ...(next[playerDaimyoId] || {}) };
+            
+            Object.keys(DAIMYO_INFO).forEach(id => {
+                if (id === playerDaimyoId || id === 'Minor') return;
+                let current = myRels[id] || 50;
+                if (id === targetDaimyoId) { current = 0; } 
+                else { current -= 10; if (neighbors.has(id)) current -= 10; }
+                myRels[id] = Math.max(0, current);
+            });
+            next[playerDaimyoId] = myRels;
+            return next;
+        });
+
+        setProvinces(prev => prev.map(p => {
+            if (p.ownerId === playerDaimyoId) {
+                return { ...p, loyalty: Math.max(0, p.loyalty - 10) };
+            }
+            return p;
+        }));
+        
+        showLog("【信義喪失】同盟/停戦を破棄して攻撃しました！");
         setModalState({ type: null });
+
+        const src = provinces.find(p => p.id === sourceId);
+        const tgt = provinces.find(p => p.id === targetProvinceId);
+        const carryRice = Math.floor(amount * 0.5); 
+        const realCost = calculateDynamicCost(src, COSTS.attack, 'attack');
+        const totalRiceNeeded = realCost.rice + carryRice;
+
+        setProvinces(prev => prev.map(p => {
+            if (p.id === sourceId) {
+                return {
+                    ...p,
+                    gold: p.gold - realCost.gold,
+                    rice: p.rice - totalRiceNeeded,
+                    troops: p.troops - amount,
+                    actionsLeft: p.actionsLeft - 1
+                };
+            }
+            return p;
+        }));
+
+        setPendingBattles(prev => [...prev, {
+            attacker: { ...src, troops: amount }, 
+            defender: tgt,
+            attackerAmount: amount,
+            attackerId: src.ownerId,
+            defenderId: tgt.ownerId
+        }]);
     };
 
     return { 
