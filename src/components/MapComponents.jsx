@@ -59,7 +59,8 @@ export const GameMap = ({
                 return (
                     <g 
                         key={p.id} 
-                        onClick={() => !isEditMode && onSelectProvince(p.id, isTargetable, isTransportTarget)} 
+                        // ▼ 修正: isEditModeでもクリックイベントを発火させるように変更
+                        onClick={() => onSelectProvince(p.id, isTargetable, isTransportTarget)} 
                         onMouseDown={(e) => {
                             if (isEditMode) {
                                 e.stopPropagation();
@@ -79,7 +80,6 @@ export const GameMap = ({
                         <text x={p.cx + (p.labelOffset?.x || 0)} y={p.cy + (p.labelOffset?.y || 0) - 8} textAnchor="middle" fill="white" fontSize="14" fontWeight="bold" className="pointer-events-none drop-shadow-md" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.8)' }}>{p.name}</text>
                         <g transform={`translate(${p.cx-15}, ${p.cy+5})`} className="pointer-events-none"><rect x="0" y="0" width="30" height="18" rx="4" fill="rgba(0,0,0,0.5)" /><text x="15" y="13" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{p.troops}</text></g>
                         
-                        {/* ▼▼▼ 修正: 民忠低下時の表示 (アニメーション削除) ▼▼▼ */}
                         {!isEditMode && p.loyalty < 30 && <text x={p.cx + 20} y={p.cy - 20} fontSize="16">🔥</text>}
                         
                         {isTargetable && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize="28" fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">攻</text>}
@@ -92,8 +92,8 @@ export const GameMap = ({
     );
 };
 
-// ProvincePopup は変更なし
-export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, isPlayerTurn, viewingRelationId, shogunId, alliances, ceasefires, coalition, onClose, onAction }) => {
+// ▼ 修正: isEditModeを受け取るように追加
+export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, isPlayerTurn, viewingRelationId, shogunId, alliances, ceasefires, coalition, onClose, onAction, isEditMode }) => {
     if (!selectedProvince) return null;
     const p = selectedProvince;
     const isOwned = p.ownerId === playerDaimyoId;
@@ -120,64 +120,82 @@ export const ProvincePopup = ({ selectedProvince, daimyoStats, playerDaimyoId, i
                 <button onClick={onClose} className="text-stone-400 hover:text-white">✕</button>
             </div>
             
-            <div className="grid grid-cols-3 gap-1 mb-2 text-xs bg-black/30 p-2 rounded">
-                <div className="flex items-center gap-1 text-yellow-300"><Coins size={10}/>{stats.gold}</div>
-                <div className="flex items-center gap-1 text-green-300"><Wheat size={10}/>{stats.rice}</div>
-                <div className="flex items-center gap-1 text-purple-300"><Crown size={10}/>{stats.fame}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-                <div>兵数: {p.troops}</div><div>防御: {p.defense}</div>
-                <div>訓練: {p.training}</div><div>民忠: {p.loyalty}</div>
-                <div>商業: {p.commerce}</div><div>石高: {p.agriculture}</div>
-                <div className="col-span-2">行動力: {p.actionsLeft}/3</div>
-            </div>
-
-            {canInteract ? (
-                isOwned ? (
-                    <div>
-                        <div className="flex border-b border-stone-600 mb-2">
-                             {['military', 'domestic', 'fame'].map(t => (
-                                 <button key={t} onClick={() => setTab(t)} className={`flex-1 py-1 text-xs font-bold ${tab===t ? 'bg-stone-600 text-white' : 'text-stone-400'}`}>
-                                     {t==='military'?'軍事':t==='domestic'?'内政':'名声'}
-                                 </button>
-                             ))}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            {tab === 'military' && (
-                                <>
-                                <button onClick={() => onAction('attack', p.id)} className="cmd-btn relative col-span-2 bg-red-900/50 border-red-700 text-red-100">出陣 <span className="text-[10px] ml-1">({COSTS.attack.gold}/{COSTS.attack.rice})</span><CostBadge/></button>
-                                <button onClick={() => onAction('transport', p.id)} className="cmd-btn relative col-span-2 bg-blue-900/50 border-blue-700 text-blue-100">輸送 <span className="text-[10px] ml-1">({COSTS.move.gold}/{COSTS.move.rice})</span><CostBadge/></button>
-                                <button onClick={() => onAction('recruit', p.id)} className="cmd-btn relative bg-blue-900/50 border-blue-700 text-blue-100">徴兵 <span className="text-[10px] ml-1">({COSTS.recruit.gold}/{COSTS.recruit.rice})</span><CostBadge/></button>
-                                <button onClick={() => onAction('train', p.id)} className="cmd-btn relative bg-orange-900/50 border-orange-700 text-orange-100">訓練 <span className="text-[10px] ml-1">({COSTS.train.gold})</span><CostBadge/></button>
-                                <button onClick={() => onAction('fortify', p.id)} className="cmd-btn relative bg-stone-700 border-stone-500 text-stone-100 col-span-2">普請 <span className="text-[10px] ml-1">({COSTS.fortify.gold})</span><CostBadge/></button>
-                                </>
-                            )}
-                            {tab === 'domestic' && (
-                                <>
-                                <button onClick={() => onAction('develop', p.id)} className="cmd-btn relative bg-yellow-900/50 border-yellow-700 text-yellow-100">商業 <span className="text-[10px] ml-1">({COSTS.develop.gold})</span><CostBadge/></button>
-                                <button onClick={() => onAction('cultivate', p.id)} className="cmd-btn relative bg-green-900/50 border-green-700 text-green-100">開墾 <span className="text-[10px] ml-1">({COSTS.cultivate.gold}/{COSTS.cultivate.rice})</span><CostBadge/></button>
-                                <button onClick={() => onAction('pacify', p.id)} className="cmd-btn relative bg-pink-900/50 border-pink-700 text-pink-100 col-span-2">施し <span className="text-[10px] ml-1">({COSTS.pacify.gold}/{COSTS.pacify.rice})</span><CostBadge/></button>
-                                <button onClick={() => onAction('market', p.id)} className="cmd-btn relative bg-orange-700 border-orange-500 text-white col-span-2">楽市楽座 <span className="text-[9px] ml-1 opacity-80">(FREE)</span></button>
-                                <button onClick={() => onAction('trade', p.id)} className="cmd-btn relative bg-teal-800 border-teal-500 text-white col-span-2">貿易 <span className="text-[10px] ml-1">({COSTS.trade.gold})</span><CostBadge/></button>
-                                </>
-                            )}
-                            {tab === 'fame' && (
-                                <>
-                                <button onClick={() => onAction('donate', p.id)} className="cmd-btn relative bg-purple-900/60 border-purple-600 text-purple-100 col-span-2 py-3">献金<CostBadge/></button>
-                                <button onClick={() => onAction('titles', p.id)} className="cmd-btn relative bg-yellow-600 border-yellow-300 text-black font-bold col-span-2 py-3">役職・官位 <span className="text-[9px] opacity-70 block font-normal">(確認無料/申請時消費)</span></button>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-2">
-                        {!isAllied && !isCeasefire && <button onClick={() => onAction('alliance', p.id)} className="cmd-btn relative bg-indigo-700 border-indigo-500 text-white h-10">同盟申請 <span className="text-[10px] ml-1">(500)</span><CostBadge/></button>}
-                        {!isCeasefire && <button onClick={() => onAction('negotiate', p.id)} className="cmd-btn relative bg-pink-800 border-pink-500 text-white h-10">{isAllied ? '外交' : '交渉'}<CostBadge/></button>}
-                        {isCeasefire && <div className="text-center text-green-300 bg-green-900/30 border border-green-700 p-2 rounded">停戦中</div>}
-                    </div>
-                )
+            {/* ▼ 修正: 編集モード用のUIを追加 */}
+            {isEditMode ? (
+                <div className="mb-4 bg-stone-900 p-2 rounded border border-yellow-600">
+                    <div className="text-yellow-400 font-bold text-sm mb-1">【編集】所属大名の変更</div>
+                    <select 
+                        className="w-full bg-stone-800 text-white border border-stone-600 rounded p-1"
+                        value={p.ownerId}
+                        onChange={(e) => onAction('change_owner', p.id, e.target.value)}
+                    >
+                        {Object.keys(DAIMYO_INFO).map(id => (
+                            <option key={id} value={id}>{DAIMYO_INFO[id].name}</option>
+                        ))}
+                    </select>
+                </div>
             ) : (
-                <div className="text-center p-4 bg-stone-900/50 rounded text-stone-400">操作不可</div>
+                <>
+                    <div className="grid grid-cols-3 gap-1 mb-2 text-xs bg-black/30 p-2 rounded">
+                        <div className="flex items-center gap-1 text-yellow-300"><Coins size={10}/>{stats.gold}</div>
+                        <div className="flex items-center gap-1 text-green-300"><Wheat size={10}/>{stats.rice}</div>
+                        <div className="flex items-center gap-1 text-purple-300"><Crown size={10}/>{stats.fame}</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+                        <div>兵数: {p.troops}</div><div>防御: {p.defense}</div>
+                        <div>訓練: {p.training}</div><div>民忠: {p.loyalty}</div>
+                        <div>商業: {p.commerce}</div><div>石高: {p.agriculture}</div>
+                        <div className="col-span-2">行動力: {p.actionsLeft}/3</div>
+                    </div>
+
+                    {canInteract ? (
+                        isOwned ? (
+                            <div>
+                                <div className="flex border-b border-stone-600 mb-2">
+                                     {['military', 'domestic', 'fame'].map(t => (
+                                         <button key={t} onClick={() => setTab(t)} className={`flex-1 py-1 text-xs font-bold ${tab===t ? 'bg-stone-600 text-white' : 'text-stone-400'}`}>
+                                             {t==='military'?'軍事':t==='domestic'?'内政':'名声'}
+                                         </button>
+                                     ))}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {tab === 'military' && (
+                                        <>
+                                        <button onClick={() => onAction('attack', p.id)} className="cmd-btn relative col-span-2 bg-red-900/50 border-red-700 text-red-100">出陣 <span className="text-[10px] ml-1">({COSTS.attack.gold}/{COSTS.attack.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('transport', p.id)} className="cmd-btn relative col-span-2 bg-blue-900/50 border-blue-700 text-blue-100">輸送 <span className="text-[10px] ml-1">({COSTS.move.gold}/{COSTS.move.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('recruit', p.id)} className="cmd-btn relative bg-blue-900/50 border-blue-700 text-blue-100">徴兵 <span className="text-[10px] ml-1">({COSTS.recruit.gold}/{COSTS.recruit.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('train', p.id)} className="cmd-btn relative bg-orange-900/50 border-orange-700 text-orange-100">訓練 <span className="text-[10px] ml-1">({COSTS.train.gold})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('fortify', p.id)} className="cmd-btn relative bg-stone-700 border-stone-500 text-stone-100 col-span-2">普請 <span className="text-[10px] ml-1">({COSTS.fortify.gold})</span><CostBadge/></button>
+                                        </>
+                                    )}
+                                    {tab === 'domestic' && (
+                                        <>
+                                        <button onClick={() => onAction('develop', p.id)} className="cmd-btn relative bg-yellow-900/50 border-yellow-700 text-yellow-100">商業 <span className="text-[10px] ml-1">({COSTS.develop.gold})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('cultivate', p.id)} className="cmd-btn relative bg-green-900/50 border-green-700 text-green-100">開墾 <span className="text-[10px] ml-1">({COSTS.cultivate.gold}/{COSTS.cultivate.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('pacify', p.id)} className="cmd-btn relative bg-pink-900/50 border-pink-700 text-pink-100 col-span-2">施し <span className="text-[10px] ml-1">({COSTS.pacify.gold}/{COSTS.pacify.rice})</span><CostBadge/></button>
+                                        <button onClick={() => onAction('market', p.id)} className="cmd-btn relative bg-orange-700 border-orange-500 text-white col-span-2">楽市楽座 <span className="text-[9px] ml-1 opacity-80">(FREE)</span></button>
+                                        <button onClick={() => onAction('trade', p.id)} className="cmd-btn relative bg-teal-800 border-teal-500 text-white col-span-2">貿易 <span className="text-[10px] ml-1">({COSTS.trade.gold})</span><CostBadge/></button>
+                                        </>
+                                    )}
+                                    {tab === 'fame' && (
+                                        <>
+                                        <button onClick={() => onAction('donate', p.id)} className="cmd-btn relative bg-purple-900/60 border-purple-600 text-purple-100 col-span-2 py-3">献金<CostBadge/></button>
+                                        <button onClick={() => onAction('titles', p.id)} className="cmd-btn relative bg-yellow-600 border-yellow-300 text-black font-bold col-span-2 py-3">役職・官位 <span className="text-[9px] opacity-70 block font-normal">(確認無料/申請時消費)</span></button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-2">
+                                {!isAllied && !isCeasefire && <button onClick={() => onAction('alliance', p.id)} className="cmd-btn relative bg-indigo-700 border-indigo-500 text-white h-10">同盟申請 <span className="text-[10px] ml-1">(500)</span><CostBadge/></button>}
+                                {!isCeasefire && <button onClick={() => onAction('negotiate', p.id)} className="cmd-btn relative bg-pink-800 border-pink-500 text-white h-10">{isAllied ? '外交' : '交渉'}<CostBadge/></button>}
+                                {isCeasefire && <div className="text-center text-green-300 bg-green-900/30 border border-green-700 p-2 rounded">停戦中</div>}
+                            </div>
+                        )
+                    ) : (
+                        <div className="text-center p-4 bg-stone-900/50 rounded text-stone-400">操作不可</div>
+                    )}
+                </>
             )}
         </div>
     );
