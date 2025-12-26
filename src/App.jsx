@@ -29,7 +29,6 @@ import {
 } from './components/BattleModals';
 
 import { useAiSystem } from './hooks/useAiSystem';
-
 import { useBattleSystem } from './hooks/useBattleSystem';
 
 // --- Main App Component ---
@@ -69,34 +68,14 @@ const App = () => {
   const [currentTurnIndex, setCurrentTurnIndex] = useState(-1);
   const [isPlayerTurn, setIsPlayerTurn] = useState(false);
   
+  // ★修正: ここで定義 (useBattleSystemより前)
+  const [isResolvingBattles, setIsResolvingBattles] = useState(false);
+  
   // Ref to access fresh state in closures
   const provincesRef = useRef(provinces);
   const alliancesRef = useRef(alliances);
   const ceasefiresRef = useRef(ceasefires);
   const daimyoStatsRef = useRef(daimyoStats);
-
-const { 
-      pendingBattles, 
-      setPendingBattles, 
-      processNextPendingBattle, 
-      handleReinforcementDecision, 
-      handleBattleFinish, 
-      handleRewardPayment 
-  } = useBattleSystem({
-      provinces,
-      setProvinces,
-      relations,
-      updateResource,
-      updateRelation,
-      showLog,
-      advanceTurn,
-      playerDaimyoId,
-      daimyoStats,
-      modalState,
-      setModalState,
-      setIsResolvingBattles
-  });
-  const [isResolvingBattles, setIsResolvingBattles] = useState(false);
 
   useEffect(() => { provincesRef.current = provinces; }, [provinces]);
   useEffect(() => { alliancesRef.current = alliances; }, [alliances]);
@@ -116,7 +95,7 @@ const {
       }
   }, []); 
 
-  // --- Step 1: 先にヘルパー関数を定義する (useAiSystemより前に) ---
+  // --- Step 1: ヘルパー関数定義 ---
 
   const showLog = (text) => { 
       setLastLog(text); 
@@ -202,8 +181,31 @@ const {
       if (!isPaused) setTimeout(determineTurnOrder, aiSpeed);
   };
 
-  // --- Step 2: useAiSystem の呼び出し (関数定義の後) ---
+  // --- Step 2: Hooks の呼び出し (ヘルパー関数定義の後) ---
   
+  // ★修正: useBattleSystem をここに移動
+  const { 
+      pendingBattles, 
+      setPendingBattles, 
+      processNextPendingBattle, 
+      handleReinforcementDecision, 
+      handleBattleFinish, 
+      handleRewardPayment 
+  } = useBattleSystem({
+      provinces,
+      setProvinces,
+      relations,
+      updateResource,
+      updateRelation,
+      showLog,
+      advanceTurn,
+      playerDaimyoId,
+      daimyoStats,
+      modalState,
+      setModalState,
+      setIsResolvingBattles
+  });
+
   const { processAiTurn } = useAiSystem({
       provincesRef,
       daimyoStatsRef,
@@ -221,7 +223,7 @@ const {
       aiSpeed
   });
 
-  // --- Step 3: useEffect (processAiTurnを使う) ---
+  // --- Step 3: useEffect ---
 
   useEffect(() => {
     checkElimination();
@@ -281,7 +283,7 @@ const {
       }
   }, [currentTurnIndex, turnOrder, isPaused, pendingBattles.length, isResolvingBattles]); 
 
-  // --- Step 4: その他のイベントハンドラ ---
+  // --- Step 4: イベントハンドラ ---
 
   const handlePauseToggle = () => setIsPaused(prev => !prev);
 
