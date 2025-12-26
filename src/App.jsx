@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
 import { COSTS } from './data/constants';
+import { SEA_ROUTES } from './data/provinces';
 import { HISTORICAL_EVENTS } from './data/events';
 import { getFormattedDate, getRiceMarketPrice } from './utils/helpers';
 import { 
@@ -948,8 +949,35 @@ const App = () => {
   };
 
   const exportData = () => {
-      console.log(JSON.stringify(provinces, null, 2));
-      alert("コンソールに現在の領土データを出力しました。(DevToolsで確認してください)");
+      // 一時的なプロパティ(actionsLeft)を除外して保存用データを作成
+      const cleanProvinces = provinces.map(({ actionsLeft, ...rest }) => rest);
+      
+      // 各都市データを1行のJSON文字列に変換し、カンマと改行で結合
+      const provincesString = cleanProvinces
+          .map(p => '  ' + JSON.stringify(p))
+          .join(',\n');
+
+      const fileContent = `// src/data/provinces.js
+
+export const SEA_ROUTES = ${JSON.stringify(SEA_ROUTES, null, 4)};
+
+export const PROVINCE_DATA_BASE = [
+${provincesString}
+];
+`;
+      
+      // Blobを作成してダウンロードリンクを生成・実行
+      const blob = new Blob([fileContent], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'provinces.js';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert("provinces.jsをダウンロードしました。");
   };
 
   const handleWheel = (e) => {
