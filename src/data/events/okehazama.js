@@ -66,20 +66,25 @@ const resolveImagawaRestChoice = (ctx) => {
             Imagawa: [
                 {
                     text: '兵を休ませる',
-                    description: '雨が止むまで休息を取り、英気を養う。',
+                    description: '雨が止むまで休息を取り、英気を養う。(奇襲リスク高)',
                     resolve: (subCtx) => {
+                        // 80%で史実通り敗北
                         if (Math.random() < 0.8) {
                             return resolveImagawaDefeat(subCtx);
                         } else {
-                            subCtx.showLog("何事もなく休息を終えました。兵の士気が回復しました。");
+                            // 20%で生存（IF展開：幸運な勝利）
+                            subCtx.showLog("豪雨の中、織田の奇襲部隊が接近しましたが、泥濘に足を取られ自滅しました！");
+                            subCtx.updateResource('Imagawa', 200, 200, 20); // 資源獲得
                             subCtx.setProvinces(prev => prev.map(p => {
-                                if (p.ownerId === 'Imagawa') return { ...p, training: Math.min(100, p.training + 10) };
+                                if (p.ownerId === 'Imagawa') return { ...p, training: Math.min(100, p.training + 20) };
+                                if (p.id === 'kiyosu') return { ...p, troops: Math.max(100, Math.floor(p.troops * 0.8)) }; // 織田に小ダメージ
                                 return p;
                             }));
+                            
                             return {
-                                title: '休息完了',
-                                image: okehazamaMarchImg,
-                                description: '雨も上がり、兵の疲労も回復しました。\n再び上洛へ向けて進軍を開始します。',
+                                title: '天運、我にあり',
+                                image: okehazamaSuccessImg, // 勝利画像（流用）
+                                description: '織田信長による乾坤一擲の奇襲は、豪雨による視界不良で失敗に終わりました。\n混乱する敵軍を尻目に、今川軍はゆうゆうと休息を完了。\n兵の士気は最高潮に達しています！',
                                 year: 1560, season: '夏'
                             };
                         }
@@ -87,17 +92,32 @@ const resolveImagawaRestChoice = (ctx) => {
                 },
                 {
                     text: '警戒を厳にし、進軍を続ける',
-                    description: 'この雨は敵にとっても好機。油断せずに進む。',
+                    description: 'この雨は敵にとっても好機。油断せずに進む。(疲労・士気低下)',
                     resolve: (subCtx) => {
-                        subCtx.showLog("警戒しつつ進軍しました。奇襲を受けることはありませんでしたが、兵に疲労が溜まっています。");
+                        // 100%生存（IF展開：完全勝利）
+                        subCtx.showLog("厳重な警戒網が織田信長の奇襲を察知！返り討ちにしました！");
+                        subCtx.updateResource('Imagawa', 0, 0, 80); // 名声大幅アップ
+                        
                         subCtx.setProvinces(prev => prev.map(p => {
-                            if (p.ownerId === 'Imagawa') return { ...p, loyalty: Math.max(0, p.loyalty - 5) };
+                            // 警戒による疲労
+                            if (p.ownerId === 'Imagawa') return { ...p, loyalty: Math.max(0, p.loyalty - 10) };
+                            // 返り討ちにより清洲の兵が大打撃
+                            if (p.id === 'kiyosu') return { ...p, troops: Math.max(100, Math.floor(p.troops * 0.5)) }; 
                             return p;
                         }));
+
+                        // 織田家を動揺（混乱）させる
+                        if (subCtx.setDaimyoStats) {
+                            subCtx.setDaimyoStats(prev => ({
+                                ...prev,
+                                Oda: { ...(prev.Oda || {}), confusionTurns: 4 }
+                            }));
+                        }
+
                         return {
-                            title: '進軍継続',
-                            image: okehazamaMarchImg,
-                            description: '警戒を緩めず進軍を続けました。\n織田軍の奇襲を未然に防いだようです。',
+                            title: '奇襲看破',
+                            image: okehazamaSuccessImg, // 勝利画像
+                            description: '「おのれ今川、隙がない...」\n織田信長の奇襲策を見破り、これを完膚なきまでに撃破しました！\n信長は多くの兵を失い、清洲城へ敗走。\n緒戦の勝利により、今川の上洛は大きく前進しました。',
                             year: 1560, season: '夏'
                         };
                     }
@@ -113,12 +133,21 @@ const resolveOdaVictory = (ctx, isAuto = false) => {
     
     ctx.setProvinces(prev => prev.map(p => {
         if (p.ownerId === 'Imagawa') {
-            // ★修正: 兵力30%まで削減、ただし最低150は残す（即死防止）
             const newTroops = Math.max(150, Math.floor(p.troops * 0.3));
             return { ...p, troops: newTroops, loyalty: Math.max(0, p.loyalty - 15) };
         }
         return p;
     }));
+
+    if (ctx.setDaimyoStats) {
+        ctx.setDaimyoStats(prev => ({
+            ...prev,
+            Imagawa: {
+                ...(prev.Imagawa || {}),
+                confusionTurns: 8 // 1年=4ターン換算で2年分
+            }
+        }));
+    }
 
     return {
         title: '桶狭間の戦い - 決着',
@@ -151,12 +180,22 @@ const resolveImagawaDefeat = (ctx) => {
     ctx.updateResource('Imagawa', -500, -500, -50);
     ctx.setProvinces(prev => prev.map(p => {
         if (p.ownerId === 'Imagawa') {
-            // ★修正: 兵力30%まで削減、ただし最低150は残す
             const newTroops = Math.max(150, Math.floor(p.troops * 0.3));
             return { ...p, troops: newTroops, loyalty: Math.max(0, p.loyalty - 15) };
         }
         return p;
     }));
+
+    if (ctx.setDaimyoStats) {
+        ctx.setDaimyoStats(prev => ({
+            ...prev,
+            Imagawa: {
+                ...(prev.Imagawa || {}),
+                confusionTurns: 8
+            }
+        }));
+    }
+
     return {
         title: '桶狭間の悲劇',
         image: okehazamaSuccessImg, 
