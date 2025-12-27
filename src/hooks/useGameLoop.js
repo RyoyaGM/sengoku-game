@@ -112,7 +112,7 @@ export const useGameLoop = ({
                     stats.ceasefirePenalty--;
                     changed = true;
                 }
-                // ★追加: 混乱（攻撃禁止）カウント
+                // 混乱（攻撃禁止）カウント
                 if (stats.confusionTurns > 0) {
                     stats.confusionTurns--;
                     changed = true;
@@ -135,7 +135,7 @@ export const useGameLoop = ({
 
             // 戦闘ダメージ適用
             if (p.battleDamage) {
-                const { commerce: commRate, agriculture: agriRate, seasonCheck, tactic } = p.battleDamage;
+                const { commerce: commRate, agriculture: agriRate, seasonCheck } = p.battleDamage;
                 const commDmg = Math.floor(comm * commRate);
                 comm -= commDmg;
                 if (isAutumn) {
@@ -150,10 +150,13 @@ export const useGameLoop = ({
                 }
             }
 
-            const commIncome = Math.floor(comm * 1.2);
-            const agIncome = Math.floor(agri * 2.0);
+            // ★バランス調整: 収入係数の変更
+            // 商業: 1.2 -> 0.4 (年利回り約16%。回収6年強)
+            const commIncome = Math.floor(comm * 0.4); 
+            // 農業: 2.0 -> 2.5 (年利回り25%。回収4年。ただし秋のみ)
+            const agIncome = Math.floor(agri * 2.5);
 
-            // ★維持費計算 (軍事制度による分岐)
+            // 維持費計算 (軍事制度による分岐)
             let goldMaint = 0;
             let riceMaint = 0;
             
