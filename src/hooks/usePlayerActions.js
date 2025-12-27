@@ -44,7 +44,19 @@ export const usePlayerActions = ({
 
         // 投資系コマンドはモーダルを開く
         if (type === 'develop' || type === 'cultivate') {
-            setModalState({ type: 'investment', data: { type, pid, maxGold: p.gold, maxRice: p.rice } });
+            // ★変更点: 1回あたりの投資上限を設定（例: 100）
+            // これにより、資金が大量にあっても少しずつしか開発できなくなります
+            const INVEST_CAP = 100; 
+            
+            setModalState({ 
+                type: 'investment', 
+                data: { 
+                    type, 
+                    pid, 
+                    maxGold: Math.min(p.gold, INVEST_CAP), 
+                    maxRice: Math.min(p.rice, INVEST_CAP) 
+                } 
+            });
             return;
         }
 
