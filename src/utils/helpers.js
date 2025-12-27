@@ -15,17 +15,12 @@ export const getRiceMarketPrice = (turn) => {
     return Math.max(0.5, (basePrice + fluctuation + seasonFactor).toFixed(2));
 };
 
-export const getFormattedDate = (turn) => {
-    const year = 1560 + Math.floor((turn - 1) / 4);
+// ★修正: 開始年を受け取れるように変更（デフォルトは1560）
+export const getFormattedDate = (turn, startYear = 1560) => {
+    const year = startYear + Math.floor((turn - 1) / 4);
     const seasons = ['春', '夏', '秋', '冬'];
     const season = seasons[(turn - 1) % 4];
     return `${year}年 ${season}`;
-};
-
-// ★ターンから季節IDを取得
-export const getSeason = (turn) => {
-  const seasonIdx = (turn - 1) % 4;
-  return ['spring', 'summer', 'autumn', 'winter'][seasonIdx];
 };
 
 // ★拠点の軍役（最大維持可能兵数）
@@ -34,6 +29,12 @@ export const getTroopCapacity = (province) => {
     return koku * 10; 
 };
 
+// ★ターンから季節IDを取得
+export const getSeason = (turn) => {
+    const seasonIdx = (turn - 1) % 4;
+    return ['spring', 'summer', 'autumn', 'winter'][seasonIdx];
+  };
+  
 // ★季節と大名の制度に応じたアクションコスト計算
 export const getActionCost = (actionType, baseCost, turn, daimyoId) => {
   const season = getSeason(turn);
