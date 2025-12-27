@@ -12,14 +12,15 @@ import {
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
-import { StartScreen, ResourceBar, ControlPanel, SpectatorControls } from './components/UIComponents';
+// SpectatorControls は ResourceBar に統合されたため削除(importからも外してOKですが、コンポーネント定義が残っていればエラーにはなりません)
+import { StartScreen, ResourceBar, ControlPanel } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal,
-  InvestmentSelector // ★ここでImport
+  InvestmentSelector
 } from './components/Modals';
 
 import { 
@@ -176,21 +177,34 @@ const App = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none text-stone-100 flex flex-col items-center justify-center bg-[#0f172a]">
-        <ResourceBar stats={displayStats} turn={turn} isPlayerTurn={isPlayerTurn} shogunId={shogunId} playerId={playerDaimyoId} coalition={coalition} />
-        <div className="absolute top-20 left-4 z-50">
-            <SpectatorControls aiSpeed={aiSpeed} onSpeedChange={setAiSpeed} isPaused={isPaused} onPauseToggle={handlePauseToggle} />
-        </div>
         
-        <div className="absolute top-20 right-4 z-50 flex flex-col items-end gap-2">
-            <div className="flex gap-2">
-                <button onClick={() => setIsEditMode(!isEditMode)} className={`px-3 py-1 rounded text-xs font-bold border ${isEditMode ? 'bg-yellow-600 border-yellow-400 text-black' : 'bg-stone-800 border-stone-600 text-white'}`}>{isEditMode ? '編集終了' : 'マップ編集'}</button>
-                {isEditMode && (<button onClick={exportData} className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white">データ出力</button>)}
-            </div>
-            <div className="bg-stone-900/80 p-2 rounded text-white text-xs flex items-center gap-2 border border-stone-600 shadow-lg">
-                <span className="font-bold whitespace-nowrap">サイズ: {iconSize}</span>
-                <input type="range" min="10" max={100} value={iconSize} onChange={(e) => setIconSize(Number(e.target.value))} className="w-24 cursor-pointer accent-yellow-500" />
-            </div>
-        </div>
+        {/* ResourceBar に機能を集約しました */}
+        <ResourceBar 
+            stats={displayStats} 
+            turn={turn} 
+            isPlayerTurn={isPlayerTurn} 
+            shogunId={shogunId} 
+            playerId={playerDaimyoId} 
+            coalition={coalition} 
+            // Spectator Props
+            aiSpeed={aiSpeed}
+            onSpeedChange={setAiSpeed}
+            isPaused={isPaused}
+            onPauseToggle={handlePauseToggle}
+            // Navigation Props
+            onHistoryClick={() => setModalState({type:'history'})}
+            onDaimyoList={() => setModalState({type: 'list'})}
+            viewingRelationId={viewingRelationId}
+            onViewBack={() => setViewingRelationId(null)}
+            // Settings Props
+            isEditMode={isEditMode}
+            onEditModeToggle={() => setIsEditMode(!isEditMode)}
+            iconSize={iconSize}
+            onIconSizeChange={setIconSize}
+            onExportData={exportData}
+        />
+
+        {/* 削除された独立ボタン群（SpectatorControls, MapEdit, IconSize）はここから消えます */}
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={handleMouseDown} onMouseMove={handleGlobalMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel}>
@@ -229,7 +243,15 @@ const App = () => {
             />
         )}
 
-        <ControlPanel lastLog={lastLog} onHistoryClick={() => setModalState({type:'history'})} onEndTurn={() => { setIsPlayerTurn(false); advanceTurn(); }} onCancelSelection={() => { setAttackSourceId(null); setTransportSourceId(null); }} isPlayerTurn={isPlayerTurn} hasSelection={attackSourceId || transportSourceId} onViewBack={() => setViewingRelationId(null)} viewingRelationId={viewingRelationId} onDaimyoList={() => setModalState({type: 'list'})} currentDaimyoId={turnOrder[currentTurnIndex]} isPaused={isPaused} />
+        {/* ControlPanel もシンプルになりました */}
+        <ControlPanel 
+            onEndTurn={() => { setIsPlayerTurn(false); advanceTurn(); }} 
+            onCancelSelection={() => { setAttackSourceId(null); setTransportSourceId(null); }} 
+            isPlayerTurn={isPlayerTurn} 
+            hasSelection={attackSourceId || transportSourceId} 
+            currentDaimyoId={turnOrder[currentTurnIndex]} 
+            isPaused={isPaused} 
+        />
         
         {modalState.type === 'tactic_selection' && <TacticSelectionModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} season={getFormattedDate(turn).split(' ')[1]} onSelect={handleTacticSelection} />}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
@@ -267,7 +289,6 @@ const App = () => {
         
         {modalState.type === 'transport_selection' && <TransportModal maxTroops={modalState.data.maxTroops} maxGold={modalState.data.maxGold} maxRice={modalState.data.maxRice} onConfirm={(amounts) => handleTroopAction(amounts, ceasefires)} onCancel={() => setModalState({type: null})} />}
 
-        {/* 投資モーダルの表示条件を修正 */}
         {modalState.type === 'investment' && modalState.data && (
             <InvestmentSelector 
                 type={modalState.data.type}
