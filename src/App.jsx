@@ -2,19 +2,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
 import { getFormattedDate } from './utils/helpers';
-// ★修正: SCENARIOSをインポート
 import { SCENARIOS } from './data/scenarios';
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
-import { StartScreen, ResourceBar, ControlPanel } from './components/UIComponents';
+import { StartScreen, ResourceBar, FloatingActionPanel, ActionLogToast } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal,
-  InvestmentSelector
+  InvestmentSelector, SettingsModal // ★SettingsModalを追加
 } from './components/Modals';
 
 import { 
@@ -30,7 +29,6 @@ import { useGameLoop } from './hooks/useGameLoop';
 import { useMapControls } from './hooks/useMapControls';
 
 const App = () => {
-  // ★修正: 初期値をnullに変更
   const [provinces, setProvinces] = useState(null);
   const [daimyoStats, setDaimyoStats] = useState(null);
   const [alliances, setAlliances] = useState(null);
@@ -41,13 +39,16 @@ const App = () => {
   const [shogunId, setShogunId] = useState('Ashikaga'); 
   const [playerDaimyoId, setPlayerDaimyoId] = useState(null); 
   
-  // ★追加: 現在のシナリオ情報
   const [currentScenario, setCurrentScenario] = useState(null);
 
-  const [aiSpeed, setAiSpeed] = useState(300);
+  // 初期速度: 1000ms (1倍速)
+  const [aiSpeed, setAiSpeed] = useState(1000);
   const [isPaused, setIsPaused] = useState(false);
   const [iconSize, setIconSize] = useState(40);
   const [isEditMode, setIsEditMode] = useState(false);
+  
+  // ★追加: 文字サイズ設定 (デフォルト16px)
+  const [fontSize, setFontSize] = useState(16);
 
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
   const [attackSourceId, setAttackSourceId] = useState(null);
@@ -56,7 +57,7 @@ const App = () => {
   
   const [modalState, setModalState] = useState({ type: null, data: null }); 
   const [logs, setLogs] = useState([]);
-  const [lastLog, setLastLog] = useState('大名を選択して天下統一を目指せ。');
+  const [lastLog, setLastLog] = useState('');
   const [isResolvingBattles, setIsResolvingBattles] = useState(false);
   
   const provincesRef = useRef(provinces);
@@ -68,6 +69,11 @@ const App = () => {
   useEffect(() => { alliancesRef.current = alliances; }, [alliances]);
   useEffect(() => { ceasefiresRef.current = ceasefires; }, [ceasefires]);
   useEffect(() => { daimyoStatsRef.current = daimyoStats; }, [daimyoStats]);
+
+  // ★追加: 文字サイズをルート要素に適用
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${fontSize}px`;
+  }, [fontSize]);
 
   const updateResource = (id, g, r, f=0) => {
       setDaimyoStats(prev => {
@@ -89,7 +95,6 @@ const App = () => {
       coalition, setCoalition, playerDaimyoId, updateResource, setModalState,
       aiSpeed, isPaused, setSelectedProvinceId, setAttackSourceId, setTransportSourceId,
       setLogs, setLastLog,
-      // ★修正: シナリオ情報を渡す
       startYear: currentScenario?.startYear || 1560,
       scenarioEvents: currentScenario?.events || []
   });
@@ -120,12 +125,10 @@ const App = () => {
       isPaused, aiSpeed
   });
 
-  // ★追加: ゲーム開始処理
   const handleStartGame = (scenarioId, daimyoId) => {
     const scenario = SCENARIOS.find(s => s.id === scenarioId);
     if (!scenario) return;
 
-    // シナリオデータで状態を初期化
     setProvinces(scenario.data.provinces);
     setDaimyoStats(scenario.data.daimyoStats);
     setRelations(scenario.data.relations);
@@ -133,7 +136,6 @@ const App = () => {
     setCeasefires(scenario.data.ceasefires || {});
     setCoalition(scenario.data.coalition || null);
     
-    // ゲーム設定
     setCurrentScenario(scenario);
     setPlayerDaimyoId(daimyoId);
     setTurn(1);
@@ -189,15 +191,16 @@ const App = () => {
       }
   };
 
-  // ★修正: データ未ロード時はスタート画面を表示
-  if (!playerDaimyoId || !provinces) {
+  if (!playerDaimyoId || !provinces || !daimyoStats) {
       return <StartScreen onStartGame={handleStartGame} />;
   }
 
   const playerProvinces = provinces.filter(p => p.ownerId === playerDaimyoId);
   const totalGold = playerProvinces.reduce((s, p) => s + p.gold, 0);
   const totalRice = playerProvinces.reduce((s, p) => s + p.rice, 0);
-  const displayStats = { ...daimyoStats[playerDaimyoId], gold: totalGold, rice: totalRice };
+  
+  const currentDaimyoStats = daimyoStats[playerDaimyoId] || {};
+  const displayStats = { ...currentDaimyoStats, gold: totalGold, rice: totalRice };
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none text-stone-100 flex flex-col items-center justify-center bg-[#0f172a]">
@@ -209,22 +212,25 @@ const App = () => {
             shogunId={shogunId} 
             playerId={playerDaimyoId} 
             coalition={coalition} 
+            startYear={currentScenario?.startYear || 1560}
+            
             aiSpeed={aiSpeed}
             onSpeedChange={setAiSpeed}
             isPaused={isPaused}
             onPauseToggle={handlePauseToggle}
+            
             onHistoryClick={() => setModalState({type:'history'})}
             onDaimyoList={() => setModalState({type: 'list'})}
-            viewingRelationId={viewingRelationId}
-            onViewBack={() => setViewingRelationId(null)}
+            onSettingsClick={() => setModalState({type: 'settings'})} // ★追加: 設定ボタン
+            
             isEditMode={isEditMode}
             onEditModeToggle={() => setIsEditMode(!isEditMode)}
             iconSize={iconSize}
             onIconSizeChange={setIconSize}
             onExportData={exportData}
-            // ★修正: 開始年を渡す
-            startYear={currentScenario?.startYear || 1560}
         />
+
+        <ActionLogToast log={lastLog} />
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={handleMouseDown} onMouseMove={handleGlobalMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel}>
@@ -267,16 +273,28 @@ const App = () => {
             />
         )}
 
-        <ControlPanel 
+        <FloatingActionPanel
             onEndTurn={() => { setIsPlayerTurn(false); advanceTurn(); }} 
             onCancelSelection={() => { setAttackSourceId(null); setTransportSourceId(null); }} 
             isPlayerTurn={isPlayerTurn} 
             hasSelection={attackSourceId || transportSourceId} 
-            currentDaimyoId={turnOrder[currentTurnIndex]} 
+            currentDaimyoName={DAIMYO_INFO[turnOrder[currentTurnIndex]]?.name}
             isPaused={isPaused} 
+            viewingRelationId={viewingRelationId}
+            onViewBack={() => setViewingRelationId(null)}
         />
         
-        {/* ★修正: TacticSelectionModalに渡すseasonにもstartYearを適用 */}
+        {/* ★追加: 設定モーダル */}
+        {modalState.type === 'settings' && (
+            <SettingsModal 
+                fontSize={fontSize}
+                setFontSize={setFontSize}
+                iconSize={iconSize}
+                setIconSize={setIconSize}
+                onClose={() => setModalState({ type: null })}
+            />
+        )}
+
         {modalState.type === 'tactic_selection' && <TacticSelectionModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} season={getFormattedDate(turn, currentScenario?.startYear).split(' ')[1]} onSelect={handleTacticSelection} />}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
@@ -322,6 +340,7 @@ const App = () => {
             />
         )}
         
+        {/* ★DaimyoListModalにprovincesを渡す */}
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
         
