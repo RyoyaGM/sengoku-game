@@ -6,6 +6,7 @@ import { SCENARIOS } from './data/scenarios';
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
+// ★修正: ActionLogToast を追加インポート
 import { StartScreen, ResourceBar, FloatingActionPanel, ActionLogToast } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 
@@ -13,7 +14,7 @@ import {
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
   TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal,
-  InvestmentSelector, SettingsModal // ★SettingsModalを追加
+  InvestmentSelector
 } from './components/Modals';
 
 import { 
@@ -46,9 +47,6 @@ const App = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [iconSize, setIconSize] = useState(40);
   const [isEditMode, setIsEditMode] = useState(false);
-  
-  // ★追加: 文字サイズ設定 (デフォルト16px)
-  const [fontSize, setFontSize] = useState(16);
 
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
   const [attackSourceId, setAttackSourceId] = useState(null);
@@ -69,11 +67,6 @@ const App = () => {
   useEffect(() => { alliancesRef.current = alliances; }, [alliances]);
   useEffect(() => { ceasefiresRef.current = ceasefires; }, [ceasefires]);
   useEffect(() => { daimyoStatsRef.current = daimyoStats; }, [daimyoStats]);
-
-  // ★追加: 文字サイズをルート要素に適用
-  useEffect(() => {
-    document.documentElement.style.fontSize = `${fontSize}px`;
-  }, [fontSize]);
 
   const updateResource = (id, g, r, f=0) => {
       setDaimyoStats(prev => {
@@ -221,15 +214,15 @@ const App = () => {
             
             onHistoryClick={() => setModalState({type:'history'})}
             onDaimyoList={() => setModalState({type: 'list'})}
-            onSettingsClick={() => setModalState({type: 'settings'})} // ★追加: 設定ボタン
-            
             isEditMode={isEditMode}
             onEditModeToggle={() => setIsEditMode(!isEditMode)}
+            // ★追加Props
             iconSize={iconSize}
             onIconSizeChange={setIconSize}
             onExportData={exportData}
         />
 
+        {/* ★新規: 一時的なアクションログ（下部中央） */}
         <ActionLogToast log={lastLog} />
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
@@ -284,17 +277,6 @@ const App = () => {
             onViewBack={() => setViewingRelationId(null)}
         />
         
-        {/* ★追加: 設定モーダル */}
-        {modalState.type === 'settings' && (
-            <SettingsModal 
-                fontSize={fontSize}
-                setFontSize={setFontSize}
-                iconSize={iconSize}
-                setIconSize={setIconSize}
-                onClose={() => setModalState({ type: null })}
-            />
-        )}
-
         {modalState.type === 'tactic_selection' && <TacticSelectionModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} season={getFormattedDate(turn, currentScenario?.startYear).split(' ')[1]} onSelect={handleTacticSelection} />}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
@@ -340,7 +322,6 @@ const App = () => {
             />
         )}
         
-        {/* ★DaimyoListModalにprovincesを渡す */}
         {modalState.type === 'history' && <LogHistoryModal logs={logs} onClose={() => setModalState({type: null})} />}
         {modalState.type === 'list' && <DaimyoListModal provinces={provinces} daimyoStats={daimyoStats} alliances={alliances} ceasefires={ceasefires} relations={relations} playerDaimyoId={playerDaimyoId} coalition={coalition} onClose={() => setModalState({type: null})} onViewOnMap={(id) => { setViewingRelationId(id); setModalState({type:null}); }} />}
         
