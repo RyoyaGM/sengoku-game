@@ -18,7 +18,8 @@ import { GameMap, ProvincePopup } from './components/MapComponents';
 import { 
   IncomingRequestModal, LogHistoryModal, MarketModal, TitlesModal, 
   DonateModal, TradeModal, NegotiationScene, DaimyoListModal, 
-  TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal
+  TroopSelector, BattleScene, GameOverScreen, HistoricalEventModal,
+  InvestmentSelector // ★ここでImport
 } from './components/Modals';
 
 import { 
@@ -26,7 +27,6 @@ import {
 } from './components/BattleModals';
 
 import { TransportModal } from './components/TransportModal';
-import { InvestmentSelector } from './components/Modals'; // ★追加: InvestmentSelectorのインポート
 
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
@@ -47,6 +47,7 @@ const App = () => {
   
   const [aiSpeed, setAiSpeed] = useState(300);
   const [isPaused, setIsPaused] = useState(false);
+  const [iconSize, setIconSize] = useState(40);
 
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
   const [attackSourceId, setAttackSourceId] = useState(null);
@@ -179,14 +180,20 @@ const App = () => {
         <div className="absolute top-20 left-4 z-50">
             <SpectatorControls aiSpeed={aiSpeed} onSpeedChange={setAiSpeed} isPaused={isPaused} onPauseToggle={handlePauseToggle} />
         </div>
-        <div className="absolute top-20 right-4 z-50 flex gap-2">
-            <button onClick={() => setIsEditMode(!isEditMode)} className={`px-3 py-1 rounded text-xs font-bold border ${isEditMode ? 'bg-yellow-600 border-yellow-400 text-black' : 'bg-stone-800 border-stone-600 text-white'}`}>{isEditMode ? '編集終了' : 'マップ編集'}</button>
-            {isEditMode && (<button onClick={exportData} className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white">データ出力</button>)}
+        
+        <div className="absolute top-20 right-4 z-50 flex flex-col items-end gap-2">
+            <div className="flex gap-2">
+                <button onClick={() => setIsEditMode(!isEditMode)} className={`px-3 py-1 rounded text-xs font-bold border ${isEditMode ? 'bg-yellow-600 border-yellow-400 text-black' : 'bg-stone-800 border-stone-600 text-white'}`}>{isEditMode ? '編集終了' : 'マップ編集'}</button>
+                {isEditMode && (<button onClick={exportData} className="px-3 py-1 rounded text-xs font-bold bg-blue-600 border border-blue-400 text-white">データ出力</button>)}
+            </div>
+            <div className="bg-stone-900/80 p-2 rounded text-white text-xs flex items-center gap-2 border border-stone-600 shadow-lg">
+                <span className="font-bold whitespace-nowrap">サイズ: {iconSize}</span>
+                <input type="range" min="10" max={100} value={iconSize} onChange={(e) => setIconSize(Number(e.target.value))} className="w-24 cursor-pointer accent-yellow-500" />
+            </div>
         </div>
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={handleMouseDown} onMouseMove={handleGlobalMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel}>
-            {/* ★修正: 親コンテナを5600x8800に固定してスケール */}
             <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75 w-[7000px] h-[11000px]">
                 <div className="absolute top-0 left-0 w-full h-full z-0 pointer-events-none">
                     <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-50" />
@@ -197,6 +204,7 @@ const App = () => {
                         alliances={alliances} ceasefires={ceasefires} coalition={coalition}
                         selectedProvinceId={selectedProvinceId} attackSourceId={attackSourceId} transportSourceId={transportSourceId}
                         onSelectProvince={handleMapSelect} isEditMode={isEditMode} onProvinceDragStart={setDraggingProvinceId}
+                        iconSize={iconSize}
                     />
                 </div>
             </div>
@@ -211,7 +219,6 @@ const App = () => {
                 isEditMode={isEditMode}
                 onAction={(type, pid, val) => {
                     if (type === 'change_owner') { setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ownerId: val } : p)); return; }
-                    
                     const domesticTypes = ['develop', 'cultivate', 'pacify', 'fortify', 'market', 'trade'];
                     if (domesticTypes.includes(type)) {
                         handleDomesticAction(type, pid);
@@ -231,13 +238,7 @@ const App = () => {
         {modalState.type === 'betrayal_warning' && 
             <BetrayalWarningModal 
                 targetDaimyoId={modalState.data.targetDaimyoId} 
-                onConfirm={() => executeBetrayal(
-                    modalState.data.targetDaimyoId, 
-                    modalState.data.sourceId, 
-                    modalState.data.targetProvinceId, 
-                    modalState.data.amount,
-                    modalState.data.isCeasefire
-                )} 
+                onConfirm={() => executeBetrayal(modalState.data.targetDaimyoId, modalState.data.sourceId, modalState.data.targetProvinceId, modalState.data.amount, modalState.data.isCeasefire)} 
                 onCancel={() => { setModalState({ type: null }); setAttackSourceId(null); }} 
             />
         }
@@ -247,31 +248,14 @@ const App = () => {
         
         {modalState.type === 'historical_event' && (
             <HistoricalEventModal 
-                event={modalState.data} 
-                daimyoId={playerDaimyoId} 
+                event={modalState.data} daimyoId={playerDaimyoId} 
                 onSelect={(choice) => {
-                    const ctx = {
-                        setProvinces, updateResource, showLog, setRelations, 
-                        setDaimyoStats, setAlliances, setCeasefires, 
-                        daimyoStats: daimyoStatsRef.current, 
-                        provinces: provincesRef.current, 
-                        playerDaimyoId
-                    };
-                    
+                    const ctx = { setProvinces, updateResource, showLog, setRelations, setDaimyoStats, setAlliances, setCeasefires, daimyoStats: daimyoStatsRef.current, provinces: provincesRef.current, playerDaimyoId };
                     let nextEvent = null;
-
-                    if (choice && choice.resolve) {
-                        nextEvent = choice.resolve(ctx);
-                    } else if (modalState.data.defaultResolve) {
-                        nextEvent = modalState.data.defaultResolve(ctx);
-                    }
-
-                    if (nextEvent) {
-                        setModalState({ type: 'historical_event', data: nextEvent });
-                    } else {
-                        setModalState({ type: null });
-                        startNewSeason(); 
-                    }
+                    if (choice && choice.resolve) nextEvent = choice.resolve(ctx);
+                    else if (modalState.data.defaultResolve) nextEvent = modalState.data.defaultResolve(ctx);
+                    if (nextEvent) setModalState({ type: 'historical_event', data: nextEvent });
+                    else { setModalState({ type: null }); startNewSeason(); }
                 }} 
             />
         )}
@@ -281,22 +265,18 @@ const App = () => {
         
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={(amount) => handleTroopAction(amount, ceasefires)} onCancel={() => setModalState({type: null})} />}
         
-        {modalState.type === 'transport_selection' && <TransportModal 
-            maxTroops={modalState.data.maxTroops}
-            maxGold={modalState.data.maxGold}
-            maxRice={modalState.data.maxRice}
-            onConfirm={(amounts) => handleTroopAction(amounts, ceasefires)} 
-            onCancel={() => setModalState({type: null})} 
-        />}
+        {modalState.type === 'transport_selection' && <TransportModal maxTroops={modalState.data.maxTroops} maxGold={modalState.data.maxGold} maxRice={modalState.data.maxRice} onConfirm={(amounts) => handleTroopAction(amounts, ceasefires)} onCancel={() => setModalState({type: null})} />}
 
-        {/* ★追加: 投資用モーダル */}
-        {modalState.type === 'investment' && <InvestmentSelector 
-            type={modalState.data.type}
-            maxGold={modalState.data.maxGold}
-            maxRice={modalState.data.maxRice}
-            onConfirm={handleInvestment} 
-            onCancel={() => setModalState({type: null})} 
-        />}
+        {/* 投資モーダルの表示条件を修正 */}
+        {modalState.type === 'investment' && modalState.data && (
+            <InvestmentSelector 
+                type={modalState.data.type}
+                maxGold={modalState.data.maxGold || 0}
+                maxRice={modalState.data.maxRice || 0}
+                onConfirm={handleInvestment} 
+                onCancel={() => setModalState({type: null})} 
+            />
+        )}
         
         {gameState !== 'playing' && <GameOverScreen gameState={gameState} onRestart={() => window.location.reload()} />}
     </div>
