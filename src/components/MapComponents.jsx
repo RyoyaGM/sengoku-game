@@ -1,6 +1,6 @@
 // src/components/MapComponents.jsx
-import React from 'react';
-import { Coins, Wheat, Users, TrendingUp, Activity, Skull, Shield, Swords } from 'lucide-react'; 
+import React, { useState } from 'react';
+import { Coins, Wheat, Users, TrendingUp, Activity, Skull, Shield, Swords, ArrowRight, Heart, Handshake, Crown } from 'lucide-react';
 import { DAIMYO_INFO } from '../data/daimyos';
 import { SEA_ROUTES } from '../data/provinces';
 import { COSTS } from '../data/constants';
@@ -10,14 +10,13 @@ export const GameMap = ({
     alliances, ceasefires, coalition, 
     selectedProvinceId, attackSourceId, transportSourceId, 
     onSelectProvince,
-    isEditMode, onProvinceDragStart 
+    isEditMode, onProvinceDragStart,
+    iconSize = 40 
 }) => {
     const currentViewId = viewingRelationId || playerDaimyoId;
 
     return (
-        // ★修正: viewBoxを画像サイズ(5600x8800)に合わせる
         <svg viewBox="0 0 7000 11000" className="w-full h-full drop-shadow-2xl filter" style={{filter: 'saturate(1.1) contrast(1.1)'}}>
-            {/* 経路の描画 */}
             {provinces.map(p => p.neighbors.map(nid => {
                 const n = provinces.find(neighbor => neighbor.id === nid);
                 if (!n || p.id > n.id) return null;
@@ -25,10 +24,8 @@ export const GameMap = ({
                 return <line key={`${p.id}-${n.id}`} x1={p.cx} y1={p.cy} x2={n.cx} y2={n.cy} stroke={isSeaRoute ? "#0ea5e9" : "white"} strokeWidth={isSeaRoute ? "3" : "2"} strokeDasharray={isSeaRoute ? "8,6" : "4,4"} opacity={isSeaRoute ? "0.6" : "0.3"} />;
             }))}
             
-            {/* プロヴィンス（拠点）の描画 */}
             {provinces.map((p) => {
                 const daimyo = DAIMYO_INFO[p.ownerId] || { color: 'bg-stone-500', fill: '#6b7280' };
-                // Tailwindの色クラスからSVG用のfill色を決定
                 let fill = daimyo.fill || '#6b7280';
                 if (!daimyo.fill) {
                     if (daimyo.color.includes('red')) fill = '#ef4444';
@@ -46,15 +43,14 @@ export const GameMap = ({
 
                 const isSelected = selectedProvinceId === p.id;
                 
-                // ★修正: アイコンサイズを拡大 (radius 24 -> 40)
                 let strokeColor = "#fff"; 
                 let strokeWidth = "2";
-                let radius = 40; 
+                let radius = iconSize; 
 
                 if (isEditMode) {
                     strokeColor = "#facc15"; 
                     strokeWidth = "3";
-                    radius = 40;
+                    radius = iconSize;
                 } else if (currentViewId && p.ownerId !== currentViewId && p.ownerId !== 'Minor') {
                     const isAllied = alliances[currentViewId]?.includes(p.ownerId);
                     const isCeasefire = ceasefires[currentViewId]?.[p.ownerId] > 0;
@@ -71,10 +67,17 @@ export const GameMap = ({
                 const isTransportTarget = !isEditMode && transportSourceId && provinces.find(pr => pr.id === transportSourceId)?.neighbors.includes(p.id) && p.ownerId === playerDaimyoId;
 
                 if (!isEditMode) {
-                    if (isSelected || attackSourceId === p.id || transportSourceId === p.id) { strokeColor = "#facc15"; strokeWidth = "8"; radius = 44; }
+                    if (isSelected || attackSourceId === p.id || transportSourceId === p.id) { strokeColor = "#facc15"; strokeWidth = "8"; radius = iconSize * 1.1; }
                     else if (isTargetable) { strokeColor = "#ef4444"; strokeWidth = "8"; }
                     else if (isTransportTarget) { strokeColor = "#3b82f6"; strokeWidth = "8"; }
                 }
+
+                const fontSizeName = iconSize * 0.6;
+                const fontSizeTroops = iconSize * 0.5;
+                const barWidth = iconSize * 1.5;
+                const barHeight = iconSize * 0.75;
+                const barOffsetX = -barWidth / 2;
+                const barOffsetY = iconSize * 0.25;
 
                 return (
                     <g 
@@ -88,29 +91,26 @@ export const GameMap = ({
                         }}
                         className={`transition-all duration-300 ${isEditMode ? 'cursor-move hover:opacity-80' : 'cursor-pointer'}`}
                     >
-                        {/* 円アイコン */}
                         <circle cx={p.cx} cy={p.cy} r={radius} fill={fill} stroke={strokeColor} strokeWidth={strokeWidth} className={(isTargetable || isTransportTarget) ? 'animate-pulse' : ''} />
                         
                         {isEditMode ? (
-                            <text x={p.cx} y={p.cy - 45} textAnchor="middle" fill="yellow" fontSize="16" fontWeight="bold" className="pointer-events-none stroke-black stroke-2">
+                            <text x={p.cx} y={p.cy - iconSize * 1.1} textAnchor="middle" fill="yellow" fontSize="16" fontWeight="bold" className="pointer-events-none stroke-black stroke-2">
                                 {Math.round(p.cx/2)},{Math.round(p.cy/2)}
                             </text>
                         ) : null}
 
-                        {/* 国名 (サイズアップ) */}
-                        <text x={p.cx + (p.labelOffset?.x || 0)} y={p.cy + (p.labelOffset?.y || 0) - 15} textAnchor="middle" fill="white" fontSize="24" fontWeight="bold" className="pointer-events-none drop-shadow-md" style={{ textShadow: '0px 0px 4px rgba(0,0,0,0.8)' }}>{p.name}</text>
+                        <text x={p.cx + (p.labelOffset?.x || 0)} y={p.cy + (p.labelOffset?.y || 0) - (fontSizeName * 0.6)} textAnchor="middle" fill="white" fontSize={fontSizeName} fontWeight="bold" className="pointer-events-none drop-shadow-md" style={{ textShadow: '0px 0px 4px rgba(0,0,0,0.8)' }}>{p.name}</text>
                         
-                        {/* 兵数表示 (サイズアップ) */}
-                        <g transform={`translate(${p.cx-30}, ${p.cy+10})`} className="pointer-events-none">
-                            <rect x="0" y="0" width="60" height="30" rx="6" fill="rgba(0,0,0,0.6)" stroke={strokeColor} strokeWidth="1" />
-                            <text x="30" y="22" textAnchor="middle" fill="white" fontSize="20" fontWeight="bold">{p.troops}</text>
+                        <g transform={`translate(${p.cx + barOffsetX}, ${p.cy + barOffsetY})`} className="pointer-events-none">
+                            <rect x="0" y="0" width={barWidth} height={barHeight} rx={barHeight * 0.2} fill="rgba(0,0,0,0.6)" stroke={strokeColor} strokeWidth="1" />
+                            <text x={barWidth / 2} y={barHeight * 0.73} textAnchor="middle" fill="white" fontSize={fontSizeTroops} fontWeight="bold">{p.troops}</text>
                         </g>
                         
-                        {!isEditMode && p.loyalty < 30 && <text x={p.cx + 25} y={p.cy - 25} fontSize="30">🔥</text>}
+                        {!isEditMode && p.loyalty < 30 && <text x={p.cx + iconSize*0.6} y={p.cy - iconSize*0.6} fontSize={iconSize*0.75}>🔥</text>}
                         
-                        {isTargetable && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize="40" fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">攻</text>}
-                        {isTransportTarget && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize="40" fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">輸</text>}
-                        {!isEditMode && coalition?.target === p.ownerId && <text x={p.cx} y={p.cy-40} className="animate-pulse" fontSize="30">🎯</text>}
+                        {isTargetable && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize={iconSize} fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">攻</text>}
+                        {isTransportTarget && <text x={p.cx} y={p.cy} textAnchor="middle" dominantBaseline="central" fontSize={iconSize} fill="white" fontWeight="bold" className="animate-pulse pointer-events-none">輸</text>}
+                        {!isEditMode && coalition?.target === p.ownerId && <text x={p.cx} y={p.cy - iconSize} className="animate-pulse" fontSize={iconSize*0.75}>🎯</text>}
                     </g>
                 );
             })}
@@ -118,11 +118,12 @@ export const GameMap = ({
     );
 };
 
-// ポップアップ (変更なし、再掲)
 export const ProvincePopup = ({ 
     selectedProvince, daimyoStats, playerDaimyoId, isPlayerTurn, viewingRelationId,
     shogunId, alliances, ceasefires, coalition, onClose, onAction, isEditMode 
 }) => {
+    const [activeTab, setActiveTab] = useState('domestic');
+
     if (!selectedProvince) return null;
 
     const p = selectedProvince;
@@ -142,7 +143,6 @@ export const ProvincePopup = ({
     
     const estGoldIncome = Math.floor(urbanPop * (commDev / 100) * TAX_RATE);
     const estRiceIncome = Math.floor(ruralPop * (agriDev / 100) * baseAgri * HARVEST_RATE);
-
     const maxRecruit = Math.floor(ruralPop * 0.1);
 
     return (
@@ -207,31 +207,94 @@ export const ProvincePopup = ({
             </div>
 
             {isOwner && isPlayerTurn && !isEditMode && (
-                <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => onAction('develop', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-yellow-900/50 border border-stone-600 hover:border-yellow-500 rounded transition-colors group">
-                        <TrendingUp size={18} className="text-yellow-500 mb-1"/>
-                        <span className="text-xs font-bold">商業投資</span>
-                    </button>
-                    <button onClick={() => onAction('cultivate', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-green-900/50 border border-stone-600 hover:border-green-500 rounded transition-colors group">
-                        <Activity size={18} className="text-green-500 mb-1"/>
-                        <span className="text-xs font-bold">開墾・治水</span>
-                    </button>
-                    <button onClick={() => onAction('recruit', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-blue-900/50 border border-stone-600 hover:border-blue-500 rounded transition-colors group">
-                        <Users size={18} className="text-blue-500 mb-1"/>
-                        <span className="text-xs font-bold">徴兵</span>
-                    </button>
-                    <button onClick={() => onAction('train', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-red-900/50 border border-stone-600 hover:border-red-500 rounded transition-colors group">
-                        <Swords size={18} className="text-red-500 mb-1"/>
-                        <span className="text-xs font-bold">訓練</span>
-                    </button>
-                    <button onClick={() => onAction('fortify', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded transition-colors">
-                        <Shield size={16} className="text-stone-400 mb-1"/>
-                        <span className="text-xs">城郭普請</span>
-                    </button>
-                    <button onClick={() => onAction('forced_recruit', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-red-950 border border-stone-600 hover:border-red-500 rounded transition-colors">
-                        <Skull size={16} className="text-red-500 mb-1"/>
-                        <span className="text-xs text-red-400">強制徴兵</span>
-                    </button>
+                <div className="space-y-2">
+                    <div className="flex border-b border-stone-700">
+                        {['domestic', 'military', 'diplomacy', 'fame'].map(tab => (
+                            <button 
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`flex-1 py-2 text-xs font-bold transition-colors ${
+                                    activeTab === tab 
+                                    ? 'text-yellow-500 border-b-2 border-yellow-500 bg-stone-800' 
+                                    : 'text-stone-500 hover:text-stone-300 hover:bg-stone-800/50'
+                                }`}
+                            >
+                                {tab === 'domestic' ? '内政' : tab === 'military' ? '軍事' : tab === 'diplomacy' ? '外交' : '名声'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="min-h-[140px]">
+                        {activeTab === 'domestic' && (
+                            <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                                <button onClick={() => onAction('develop', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-yellow-900/50 border border-stone-600 hover:border-yellow-500 rounded transition-colors">
+                                    <TrendingUp size={18} className="text-yellow-500 mb-1"/>
+                                    <span className="text-xs font-bold">商業投資</span>
+                                </button>
+                                <button onClick={() => onAction('cultivate', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-green-900/50 border border-stone-600 hover:border-green-500 rounded transition-colors">
+                                    <Activity size={18} className="text-green-500 mb-1"/>
+                                    <span className="text-xs font-bold">開墾・治水</span>
+                                </button>
+                                <button onClick={() => onAction('market', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-yellow-900/30 border border-stone-600 hover:border-yellow-500 rounded transition-colors">
+                                    <Coins size={18} className="text-yellow-500 mb-1"/>
+                                    <span className="text-xs font-bold">楽市 (米→金)</span>
+                                </button>
+                                <button onClick={() => onAction('trade', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-green-900/30 border border-stone-600 hover:border-green-500 rounded transition-colors">
+                                    <Wheat size={18} className="text-green-500 mb-1"/>
+                                    <span className="text-xs font-bold">交易 (金→米)</span>
+                                </button>
+                                <button onClick={() => onAction('fortify', p.id)} className="col-span-2 flex flex-row items-center justify-center p-2 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded transition-colors gap-2">
+                                    <Shield size={16} className="text-stone-400"/>
+                                    <span className="text-xs">城郭普請 (防御強化)</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {activeTab === 'military' && (
+                            <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                                <button onClick={() => onAction('recruit', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-blue-900/50 border border-stone-600 hover:border-blue-500 rounded transition-colors">
+                                    <Users size={18} className="text-blue-500 mb-1"/>
+                                    <span className="text-xs font-bold">徴兵</span>
+                                </button>
+                                <button onClick={() => onAction('train', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-red-900/50 border border-stone-600 hover:border-red-500 rounded transition-colors">
+                                    <Swords size={18} className="text-red-500 mb-1"/>
+                                    <span className="text-xs font-bold">訓練</span>
+                                </button>
+                                <button onClick={() => onAction('move', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-blue-900/30 border border-stone-600 hover:border-blue-500 rounded transition-colors">
+                                    <ArrowRight size={18} className="text-blue-400 mb-1"/>
+                                    <span className="text-xs font-bold">輸送・移動</span>
+                                </button>
+                                <button onClick={() => onAction('forced_recruit', p.id)} className="flex flex-col items-center justify-center p-2 bg-stone-800 hover:bg-red-950 border border-stone-600 hover:border-red-500 rounded transition-colors">
+                                    <Skull size={18} className="text-red-500 mb-1"/>
+                                    <span className="text-xs text-red-400">強制徴兵</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {activeTab === 'diplomacy' && (
+                            <div className="flex flex-col items-center justify-center h-32 text-stone-500 text-xs text-center animate-fade-in border border-stone-800 rounded bg-stone-800/30 p-4">
+                                <Handshake size={32} className="mb-2 opacity-50"/>
+                                <p>他国勢力の領地を選択するか<br/>全体マップメニューから<br/>外交を行ってください。</p>
+                            </div>
+                        )}
+
+                        {activeTab === 'fame' && (
+                            <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                                <button onClick={() => onAction('pacify', p.id)} className="col-span-2 flex flex-row items-center justify-center p-3 bg-stone-800 hover:bg-pink-900/30 border border-stone-600 hover:border-pink-500 rounded transition-colors gap-2">
+                                    <Heart size={18} className="text-pink-500"/>
+                                    <span className="text-xs font-bold">民心掌握 (忠誠回復)</span>
+                                </button>
+                                <button className="flex flex-col items-center justify-center p-2 bg-stone-800/50 border border-stone-700 text-stone-500 rounded cursor-not-allowed">
+                                    <Coins size={18} className="mb-1"/>
+                                    <span className="text-xs">寄付 (未)</span>
+                                </button>
+                                <button className="flex flex-col items-center justify-center p-2 bg-stone-800/50 border border-stone-700 text-stone-500 rounded cursor-not-allowed">
+                                    <Crown size={18} className="mb-1"/>
+                                    <span className="text-xs">朝廷 (未)</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
             
