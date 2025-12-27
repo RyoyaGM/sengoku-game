@@ -1,4 +1,3 @@
-// src/hooks/useGameLoop.js
 import { useState, useEffect } from 'react';
 import { DAIMYO_INFO } from '../data/daimyos';
 import { HISTORICAL_EVENTS } from '../data/events';
@@ -99,20 +98,17 @@ export const useGameLoop = ({
             let changed = false;
             Object.keys(next).forEach(id => {
                 const stats = next[id];
-                // 外交全般禁止カウント
                 if (stats.diplomacyPenalty > 0) {
                     stats.diplomacyPenalty--;
                     changed = true;
                     if (stats.diplomacyPenalty === 0 && id === playerDaimyoId) {
-                        showLog("外交への信頼が多少回復しました。交渉が可能になります。");
+                        showLog("外交への信頼が多少回復しました。");
                     }
                 }
-                // 停戦交渉禁止カウント
                 if (stats.ceasefirePenalty > 0) {
                     stats.ceasefirePenalty--;
                     changed = true;
                 }
-                // 混乱（攻撃禁止）カウント
                 if (stats.confusionTurns > 0) {
                     stats.confusionTurns--;
                     changed = true;
@@ -124,46 +120,63 @@ export const useGameLoop = ({
             return changed ? next : prev;
         });
 
-        // --- 収入・維持費計算 (拠点独立採算) ---
+        // --- 収入・維持費計算 (新・人口経済システム) ---
         setProvinces(curr => curr.map(p => {
             const daimyoId = p.ownerId;
             const daimyo = DAIMYO_INFO[daimyoId];
             const system = daimyo?.militarySystem || 'standard';
 
-            let comm = p.commerce;
-            let agri = isAutumn ? p.agriculture : 0;
+            // 基本パラメータの取得
+            const pop = p.population || 10000;
+            const urb = p.urbanization || 0.1;
+            const commDev = p.commerceDev || 10;
+            const agriDev = p.agriDev || 20;
+            const baseAgri = p.baseAgri || 1.0;
+
+            // 人口内訳
+            const urbanPop = pop * urb;
+            const ruralPop = pop * (1 - urb);
+
+            // ダメージ計算用の一時変数
+            let currentCommDev = commDev;
+            let currentAgriDev = agriDev;
 
             // 戦闘ダメージ適用
             if (p.battleDamage) {
-                const { commerce: commRate, agriculture: agriRate, seasonCheck } = p.battleDamage;
-                const commDmg = Math.floor(comm * commRate);
-                comm -= commDmg;
-                if (isAutumn) {
-                     // 夏(1)または秋(2)に攻められた場合
-                    if (seasonCheck === 1 || seasonCheck === 2) {
-                        const agriDmg = Math.floor(agri * agriRate);
-                        agri -= agriDmg;
-                        if (daimyoId === playerDaimyoId && agriDmg > 0) {
-                            showLog(`${p.name}: 戦火により兵糧収入減`);
-                        }
+                const { commerce: commDmgRate, agriculture: agriDmgRate, seasonCheck } = p.battleDamage;
+                // 開発度が下がる（施設破壊）
+                currentCommDev = Math.max(0, Math.floor(currentCommDev * commDmgRate));
+                
+                if (isAutumn && (seasonCheck === 1 || seasonCheck === 2)) {
+                    // 農繁期に戦場になると農業開発度（生産設備）もダメージ
+                    const damage = Math.floor(currentAgriDev * (1 - agriDmgRate));
+                    currentAgriDev = Math.max(0, currentAgriDev - damage);
+                    if (damage > 0 && daimyoId === playerDaimyoId) {
+                        showLog(`${p.name}: 戦火により農地が荒廃しました。`);
                     }
                 }
             }
 
-            // ★バランス調整: 収入係数の変更
-            // 商業: 1.2 -> 0.4 (年利回り約16%。回収6年強)
-            const commIncome = Math.floor(comm * 0.4); 
-            // 農業: 2.0 -> 2.5 (年利回り25%。回収4年。ただし秋のみ)
-            const agIncome = Math.floor(agri * 2.5);
+            // --- 収入計算式 ---
+            
+            // 1. 金銭収入 (都市人口 × 開発度 × 税率)
+            // 係数 0.015: 都市人口10万人・開発100%なら 100000 * 1.0 * 0.015 = 1500金
+            const TAX_RATE = 0.015;
+            const commIncome = Math.floor(urbanPop * (currentCommDev / 100) * TAX_RATE);
 
-            // 維持費計算 (軍事制度による分岐)
+            // 2. 兵糧収入 (農村人口 × 開発度 × 肥沃度 × 収穫率) ※秋のみ
+            // 係数 0.02: 農村10万人・開発50%・肥沃度1.0なら 100000 * 0.5 * 1.0 * 0.02 = 1000米(年1回) -> 4ターンで消費250/ターン
+            const HARVEST_RATE = 0.02;
+            const agIncome = isAutumn ? Math.floor(ruralPop * (currentAgriDev / 100) * baseAgri * HARVEST_RATE) : 0;
+
+            // --- 維持費計算 ---
             let goldMaint = 0;
             let riceMaint = 0;
             
             if (system === 'separated') {
                 // 兵農分離: 金がかかる
-                goldMaint = Math.floor(p.troops * 0.5);
-                riceMaint = Math.floor(p.troops * 0.05);
+                goldMaint = Math.floor(p.troops * 0.1);
+                riceMaint = Math.floor(p.troops * 0.1);
             } else if (system === 'ichiryo') {
                 // 一領具足: ほぼタダ
                 goldMaint = 0;
@@ -171,7 +184,7 @@ export const useGameLoop = ({
             } else {
                 // 標準
                 goldMaint = 0;
-                riceMaint = Math.floor(p.troops * 0.1);
+                riceMaint = Math.floor(p.troops * 0.1); // 兵1000なら毎ターン100米消費
             }
 
             let newGold = (p.gold || 0) + commIncome - goldMaint;
@@ -198,6 +211,8 @@ export const useGameLoop = ({
                 gold: newGold,
                 rice: newRice,
                 troops: newTroops,
+                commerceDev: currentCommDev, // ダメージ反映後の開発度を保存
+                agriDev: currentAgriDev,
                 actionsLeft: 3,
                 battleDamage: null 
             };
