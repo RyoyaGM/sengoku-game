@@ -12,7 +12,9 @@ export const COSTS = {
   trade: { gold: 200, rice: 0, action: 1 }, // 貿易は実行時消費
 
   // 軍事
-  recruit: { gold: 30, rice: 50, troops: 100, action: 1 },
+  // B案: 初期兵力規模に合わせて、徴兵の効果とコストを5倍に引き上げ
+  recruit: { gold: 150, rice: 250, troops: 500, action: 1 },
+  
   train: { gold: 30, rice: 0, boost: 5, action: 1 },
   attack: { gold: 20, rice: 80, action: 1 },
   move: { gold: 10, rice: 10, action: 1 },
