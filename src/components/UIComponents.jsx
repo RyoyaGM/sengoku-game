@@ -1,14 +1,12 @@
 // src/components/UIComponents.jsx
-import React, { useState } from 'react';
-import { Shield, Coins, Users, ArrowRight, RotateCcw, List, History, XCircle, Eye, FastForward, Play, Pause, Activity, Menu, Map as MapIcon, Wheat, Star, BookOpen } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Coins, Users, ArrowRight, RotateCcw, List, History, XCircle, Eye, Play, Pause, Activity, Map as MapIcon, Wheat, Star, BookOpen, Edit, Save, Settings, Download } from 'lucide-react';
 import { DAIMYO_INFO } from '../data/daimyos';
 import { SCENARIOS } from '../data/scenarios';
 
-// ★修正: シナリオ選択と大名選択を統合
+// --- スタート画面（変更なし） ---
 export const StartScreen = ({ onStartGame }) => {
   const [selectedScenarioId, setSelectedScenarioId] = useState(SCENARIOS[0].id);
-
-  // 選択中のシナリオ情報を取得
   const selectedScenario = SCENARIOS.find(s => s.id === selectedScenarioId) || SCENARIOS[0];
 
   return (
@@ -80,179 +78,243 @@ export const StartScreen = ({ onStartGame }) => {
   );
 };
 
-// ★修正: startYearを受け取るように変更
-export const ResourceBar = ({ stats, turn, isPlayerTurn, shogunId, playerId, coalition, startYear }) => {
+// --- ResourceBar: 速度調整、設定ボタンなど ---
+export const ResourceBar = ({ 
+    stats, turn, isPlayerTurn, shogunId, playerId, coalition, startYear,
+    aiSpeed, onSpeedChange, isPaused, onPauseToggle,
+    onHistoryClick, onDaimyoList, onSettingsClick, 
+    isEditMode, onEditModeToggle,
+    iconSize, onIconSizeChange, onExportData
+}) => {
   const isSpectator = playerId === 'SPECTATOR';
   if (!stats && !isSpectator) return null;
 
-  const isShogun = playerId === shogunId;
   const currentYear = (startYear || 1560) + Math.floor((turn - 1) / 4);
   const currentSeason = ['春', '夏', '秋', '冬'][(turn - 1) % 4];
 
+  // 速度倍率の計算 (基準: 1000ms = 1倍速)
+  const currentMultiplier = Math.round(1000 / Math.max(10, aiSpeed));
+
+  const handleSpeedInput = (e) => {
+      const val = parseInt(e.target.value);
+      if (!isNaN(val) && val > 0) {
+          const newMs = Math.max(10, Math.floor(1000 / val));
+          onSpeedChange(newMs);
+      }
+  };
+
+  const setPresetSpeed = (multiplier) => {
+      const newMs = Math.max(10, Math.floor(1000 / multiplier));
+      onSpeedChange(newMs);
+  };
+
   return (
-    <div className="absolute top-0 left-0 right-0 bg-stone-900/95 text-white h-14 px-6 flex justify-between items-center shadow-md z-40 border-b border-stone-700 backdrop-blur-sm">
-      <div className="flex items-center gap-6">
+    <div className="absolute top-0 left-0 right-0 bg-stone-900/95 text-white h-14 px-4 flex justify-between items-center shadow-md z-40 border-b border-stone-700 backdrop-blur-sm">
+      
+      {/* 左側: 日付と時間操作 */}
+      <div className="flex items-center gap-4">
         <div className="flex flex-col">
-            <div className="text-xs text-stone-400 font-serif">戦国絵巻</div>
-            <div className="text-lg font-bold font-serif flex items-baseline gap-2">
+            <div className="text-[10px] text-stone-400 font-serif leading-none mb-0.5">戦国絵巻</div>
+            <div className="text-lg font-bold font-serif flex items-baseline gap-2 leading-none">
                 {currentYear}年 <span className="text-xl text-yellow-500">{currentSeason}</span>
-                <span className="text-xs text-stone-500 font-mono">(Turn {turn})</span>
             </div>
         </div>
-        
-        {isSpectator ? (
-            <div className="flex items-center gap-2 text-stone-400 font-bold bg-stone-800 px-3 py-1 rounded border border-stone-600 text-xs">
-                <Eye size={14} /> 観戦中
+
+        {/* 速度調整パネル */}
+        <div className="flex items-center gap-2 bg-stone-800/50 p-1 pl-2 pr-2 rounded-full border border-stone-600/50">
+            <button 
+                onClick={onPauseToggle} 
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all shadow-md ${isPaused ? 'bg-yellow-600 text-black animate-pulse' : 'bg-stone-700 text-stone-300 hover:bg-stone-600'}`}
+                title={isPaused ? "再開" : "一時停止"}
+            >
+                {isPaused ? <Play size={14} className="fill-current"/> : <Pause size={14} className="fill-current"/>}
+            </button>
+
+            <div className="flex items-center gap-1 border-l border-stone-700 pl-2">
+                {/* プリセットボタン */}
+                <button onClick={() => setPresetSpeed(1)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===1 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>1倍</button>
+                <button onClick={() => setPresetSpeed(5)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===5 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>5倍</button>
+                <button onClick={() => setPresetSpeed(20)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===20 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>20倍</button>
+                <button onClick={() => setPresetSpeed(100)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===100 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>超速</button>
             </div>
-        ) : (
-             <div className="flex items-center gap-2 px-3 py-1 bg-stone-800 rounded border border-stone-600">
-                <div className={`w-6 h-6 rounded-full ${DAIMYO_INFO[playerId]?.color || 'bg-gray-500'} border border-white shadow-lg flex items-center justify-center font-bold text-xs`}>
-                    {DAIMYO_INFO[playerId]?.name?.[0]}
-                </div>
-                <div className="flex flex-col leading-none">
-                    <span className="text-[10px] text-stone-400">当主</span>
-                    <span className="font-bold text-sm">{DAIMYO_INFO[playerId]?.name}</span>
-                </div>
+            
+            <div className="flex items-center gap-1 ml-1 bg-stone-900 rounded px-2 py-0.5 border border-stone-700">
+                <span className="text-stone-500 text-xs">×</span>
+                <input 
+                    type="text"
+                    inputMode="numeric" 
+                    pattern="\d*"
+                    value={currentMultiplier} 
+                    onChange={handleSpeedInput}
+                    className="w-8 bg-transparent text-center text-yellow-400 font-mono font-bold text-sm focus:outline-none"
+                />
+                <span className="text-stone-500 text-xs">倍</span>
             </div>
-        )}
+        </div>
       </div>
 
-      <div className="flex-1 flex justify-center">
+      {/* 中央: 状態表示 */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
              {isPlayerTurn ? (
-                 <div className="px-4 py-1 bg-blue-900/50 border border-blue-500 rounded-full animate-pulse font-bold text-blue-200 shadow-[0_0_15px_rgba(59,130,246,0.5)] text-sm">
+                 <div className="px-4 py-1 bg-blue-900/80 border border-blue-500 rounded-full animate-pulse font-bold text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)] text-sm">
                      あなたの手番です
                  </div>
              ) : (
                  !isSpectator && (
-                 <div className="px-4 py-1 bg-stone-800 border border-stone-600 rounded-full text-stone-500 flex items-center gap-2 text-sm">
+                 <div className="px-4 py-1 bg-stone-800/80 border border-stone-600 rounded-full text-stone-500 flex items-center gap-2 text-sm">
                      <Activity size={14} className="animate-spin"/> 他国が行動中...
                  </div>
                  )
              )}
       </div>
       
-      {!isSpectator && stats && (
-        <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-1" title="軍資金">
-                <Coins size={16} className="text-yellow-400" />
-                <span className="font-mono font-bold text-yellow-100">{stats.gold.toLocaleString()}</span>
+      {/* 右側: 資源とメニューボタン */}
+      <div className="flex items-center gap-6 relative">
+        {!isSpectator && stats && (
+            <div className="flex items-center gap-4 text-sm bg-stone-800/50 px-3 py-1 rounded-full border border-stone-700">
+                <div className="flex items-center gap-1" title="軍資金">
+                    <Coins size={14} className="text-yellow-400" />
+                    <span className="font-mono font-bold text-yellow-100">{stats.gold.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1" title="兵糧">
+                    <Wheat size={14} className="text-green-400" />
+                    <span className="font-mono font-bold text-green-100">{stats.rice.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1" title="名声">
+                    <Star size={14} className="text-purple-400" />
+                    <span className="font-mono font-bold text-purple-100">{stats.fame}</span>
+                </div>
             </div>
-            <div className="flex items-center gap-1" title="兵糧">
-                <Wheat size={16} className="text-green-400" />
-                <span className="font-mono font-bold text-green-100">{stats.rice.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-1" title="名声">
-                <Star size={16} className="text-purple-400" />
-                <span className="font-mono font-bold text-purple-100">{stats.fame}</span>
-            </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex items-center gap-2 ml-4">
-          {coalition && <div className="text-[10px] bg-red-900 text-red-100 px-2 py-1 rounded animate-pulse border border-red-500 font-bold">⚠ {coalition.targetId === playerId ? '包囲網 対象' : '包囲網'} (残{coalition.duration}T)</div>}
-          {isShogun && <div className="text-[10px] bg-yellow-900 text-yellow-100 px-2 py-1 rounded border border-yellow-500 flex items-center gap-1">征夷大将軍</div>}
+        {coalition && <div className="text-[10px] bg-red-900 text-red-100 px-2 py-1 rounded animate-pulse border border-red-500 font-bold whitespace-nowrap">包囲網 (残{coalition.duration})</div>}
+
+        <div className="flex items-center gap-2">
+            <button onClick={onHistoryClick} className="p-2 bg-stone-800 hover:bg-stone-700 rounded border border-stone-600 text-stone-300 transition-colors" title="履歴">
+                <History size={18}/>
+            </button>
+            <button onClick={onDaimyoList} className="p-2 bg-stone-800 hover:bg-stone-700 rounded border border-stone-600 text-stone-300 transition-colors" title="勢力一覧">
+                <List size={18}/>
+            </button>
+            
+            {/* 編集ボタン */}
+            <div className="relative group">
+                <button 
+                    onClick={onEditModeToggle} 
+                    className={`p-2 rounded border transition-colors ${isEditMode ? 'bg-yellow-800 border-yellow-500 text-yellow-200' : 'bg-stone-800 border-stone-600 text-stone-300 hover:bg-stone-700'}`} 
+                    title="マップ編集モード"
+                >
+                    <Edit size={18}/>
+                </button>
+                
+                {/* 編集モード時のポップアップメニュー */}
+                {isEditMode && (
+                    <div className="absolute top-full right-0 mt-2 bg-stone-800 border border-stone-600 rounded-lg p-3 shadow-xl w-48 z-50 flex flex-col gap-3 animate-fade-in">
+                        <div>
+                            <div className="flex justify-between text-xs text-stone-400 mb-1">
+                                <span>アイコンサイズ</span>
+                                <span className="text-yellow-400 font-mono">{iconSize}</span>
+                            </div>
+                            <input 
+                                type="range" min="20" max="80" value={iconSize} 
+                                onChange={(e) => onIconSizeChange(parseInt(e.target.value))}
+                                className="w-full h-1 bg-stone-600 rounded accent-yellow-500"
+                            />
+                        </div>
+                        <button 
+                            onClick={onExportData}
+                            className="flex items-center justify-center gap-2 bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 rounded border border-stone-500 transition-colors"
+                        >
+                            <Download size={14}/>
+                            <span>provinces.js 保存</span>
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* ★設定ボタン */}
+            <button onClick={onSettingsClick} className="p-2 bg-stone-800 hover:bg-stone-700 rounded border border-stone-600 text-stone-300 transition-colors" title="設定">
+                <Settings size={18}/>
+            </button>
+        </div>
       </div>
     </div>
   );
 };
 
-export const SpectatorControls = ({ aiSpeed, onSpeedChange, isPaused, onPauseToggle }) => {
+// --- ActionLogToast ---
+export const ActionLogToast = ({ log }) => {
+    const [visible, setVisible] = useState(false);
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        if (log) {
+            setMessage(log);
+            setVisible(true);
+            const timer = setTimeout(() => {
+                setVisible(false);
+            }, 4000); 
+            return () => clearTimeout(timer);
+        }
+    }, [log]);
+
+    if (!visible) return null;
+
     return (
-        <div className="bg-stone-900/80 p-1.5 rounded border border-stone-600 flex items-center gap-2 backdrop-blur scale-90 origin-top-left">
-            <button 
-                onClick={onPauseToggle} 
-                className={`w-8 h-8 flex items-center justify-center rounded-full border shadow-lg transition-all ${isPaused ? 'bg-yellow-600 border-yellow-400 text-black animate-pulse' : 'bg-stone-800 border-stone-600 text-white hover:bg-stone-700'}`}
-                title={isPaused ? "再開" : "一時停止"}
-            >
-                {isPaused ? <Play size={16} className="fill-current"/> : <Pause size={16} className="fill-current"/>}
-            </button>
-
-            <div className="h-4 w-px bg-stone-700 mx-1"></div>
-
-            <div className="bg-stone-800 text-white rounded-full border border-stone-600 flex overflow-hidden shadow-lg">
-                <button onClick={() => onSpeedChange(800)} className={`px-2 py-1.5 hover:bg-stone-600 transition-colors text-[10px] font-bold ${aiSpeed === 800 ? 'bg-stone-600 text-yellow-400' : 'text-stone-400'}`}>低</button>
-                <button onClick={() => onSpeedChange(300)} className={`px-2 py-1.5 hover:bg-stone-600 transition-colors text-[10px] font-bold border-l border-r border-stone-700 ${aiSpeed === 300 ? 'bg-stone-600 text-yellow-400' : 'text-stone-400'}`}>中</button>
-                <button onClick={() => onSpeedChange(50)} className={`px-2 py-1.5 hover:bg-stone-600 transition-colors text-[10px] font-bold border-r border-stone-700 ${aiSpeed === 50 ? 'bg-stone-600 text-yellow-400' : 'text-stone-400'}`}>高</button>
-                <button onClick={() => onSpeedChange(10)} className={`px-2 py-1.5 hover:bg-stone-600 transition-colors text-[10px] font-bold ${aiSpeed === 10 ? 'bg-stone-600 text-yellow-400' : 'text-stone-400'}`}><FastForward size={12}/></button>
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none w-max max-w-lg">
+            <div className="bg-black/80 text-white px-6 py-2.5 rounded-full border border-stone-500/50 backdrop-blur-sm shadow-xl animate-bounce-in text-sm font-medium flex items-center gap-3">
+                <History size={16} className="text-yellow-500 shrink-0"/>
+                <span className="truncate">{message}</span>
             </div>
         </div>
     );
 };
 
-export const ControlPanel = ({ 
-    lastLog, 
-    onHistoryClick, 
-    onEndTurn, 
-    onCancelSelection, 
-    isPlayerTurn, 
-    hasSelection, 
-    onViewBack, 
-    viewingRelationId, 
-    onDaimyoList,
-    currentDaimyoId,
-    isPaused
+// --- FloatingActionPanel ---
+export const FloatingActionPanel = ({ 
+    onEndTurn, isPlayerTurn, onCancelSelection, hasSelection, 
+    viewingRelationId, onViewBack, isPaused, currentDaimyoName 
 }) => {
-    const currentDaimyoName = DAIMYO_INFO[currentDaimyoId]?.name || '---';
-
     return (
-    <div className="absolute bottom-0 left-0 w-full h-16 bg-stone-900 border-t border-stone-700 flex items-center px-4 z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
-        <div className="flex-1 mr-4 bg-black/40 h-10 rounded border border-stone-700 px-3 flex items-center relative group cursor-pointer" onClick={onHistoryClick}>
-            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <History size={14} className="text-stone-400"/>
-            </div>
-            <div className="text-xs text-stone-500 mr-2 border-r border-stone-700 pr-2 flex items-center gap-1">
-                <span>ログ</span>
-                {isPaused && <span className="text-red-500 font-bold">停止中</span>}
-            </div>
-            <div className="text-xs text-stone-300 font-mono truncate flex-1">{lastLog}</div>
-        </div>
-
-        <div className="flex items-center gap-2">
-            {viewingRelationId ? (
-                <button onClick={onViewBack} className="h-10 px-4 bg-stone-700 hover:bg-stone-600 rounded flex items-center justify-center border-b-2 border-stone-900 active:border-b-0 active:translate-y-0.5 transition-all text-white gap-2">
+        <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-40 pointer-events-none">
+            {viewingRelationId && (
+                <button onClick={onViewBack} className="pointer-events-auto h-10 px-4 bg-stone-700 hover:bg-stone-600 text-white rounded shadow-lg flex items-center gap-2 border border-stone-500 transition-transform hover:scale-105">
                     <MapIcon size={16}/>
-                    <span className="text-xs font-bold">地図へ</span>
-                </button>
-            ) : (
-                <button onClick={onDaimyoList} className="h-10 w-10 bg-stone-800 hover:bg-stone-700 rounded flex items-center justify-center border border-stone-600 transition-colors" title="勢力一覧">
-                    <Menu size={18} className="text-stone-300"/>
+                    <span className="font-bold text-sm">自国へ戻る</span>
                 </button>
             )}
 
             {hasSelection && (
-                <button onClick={onCancelSelection} className="h-10 px-4 bg-red-900 hover:bg-red-800 text-white rounded flex items-center justify-center border-b-2 border-red-950 active:border-b-0 active:translate-y-0.5 transition-all gap-1">
+                <button onClick={onCancelSelection} className="pointer-events-auto h-10 px-4 bg-red-800 hover:bg-red-700 text-white rounded shadow-lg flex items-center gap-2 border border-red-600 transition-transform hover:scale-105">
                     <XCircle size={16}/>
-                    <span className="font-bold text-xs">解除</span>
+                    <span className="font-bold text-sm">選択解除</span>
                 </button>
             )}
-
-            <div className="h-8 w-px bg-stone-700 mx-1"></div>
 
             <button 
                 onClick={onEndTurn} 
                 disabled={!isPlayerTurn}
-                className={`h-12 px-6 rounded-lg flex items-center justify-center transition-all gap-2 ${
+                className={`pointer-events-auto h-14 px-8 rounded-full flex items-center justify-center transition-all gap-2 shadow-xl border-2 ${
                     isPlayerTurn 
-                    ? 'bg-yellow-600 hover:bg-yellow-500 text-black border-b-4 border-yellow-800 active:border-b-0 active:translate-y-1 shadow-[0_0_15px_rgba(234,179,8,0.3)]' 
-                    : 'bg-stone-800 text-stone-600 border border-stone-700 cursor-not-allowed opacity-50'
+                    ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black border-yellow-300 transform hover:scale-105 active:scale-95 cursor-pointer' 
+                    : 'bg-stone-800 text-stone-500 border-stone-600 cursor-not-allowed opacity-80'
                 }`}
             >
                 {isPlayerTurn ? (
                     <>
-                        <span className="text-sm font-black tracking-widest">評定終了</span>
-                        <ArrowRight size={16}/>
+                        <span className="text-lg font-black tracking-widest">評定終了</span>
+                        <ArrowRight size={20} strokeWidth={3}/>
                     </>
                 ) : (
                     <>
                         <RotateCcw size={16} className={isPaused ? "" : "animate-spin"}/>
                         <div className="flex flex-col items-start leading-none">
                             <span className="text-[10px] font-bold">待機中</span>
-                            <span className="text-[9px] opacity-75">{currentDaimyoName}家...</span>
+                            <span className="text-[9px] opacity-75">{currentDaimyoName}</span>
                         </div>
                     </>
                 )}
             </button>
         </div>
-    </div>
     );
 };
