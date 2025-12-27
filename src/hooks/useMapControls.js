@@ -2,19 +2,19 @@
 import { useState, useEffect } from 'react';
 import { SEA_ROUTES } from '../data/provinces';
 
-export const useMapControls = ({ provinces, setProvinces }) => {
+// isEditMode を引数から受け取るように修正
+export const useMapControls = ({ provinces, setProvinces, isEditMode }) => {
     // --- マップ表示用 State ---
     const [mapTransform, setMapTransform] = useState({ x: 0, y: 0, scale: 0.6 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
 
     // --- 編集モード用 State ---
-    const [isEditMode, setIsEditMode] = useState(false);
     const [draggingProvinceId, setDraggingProvinceId] = useState(null);
 
     // --- 初期位置設定 (京都中心) ---
     useEffect(() => {
-        const kyoto = provinces.find(p => p.id === 'kyoto' || p.id === 'yamashiro');
+        const kyoto = provinces.find(p => p.id === 'kyoto' || p.id === 'yamashiro' || p.id === 'kannonji');
         if (kyoto) {
             const initialScale = 0.6;
             const screenW = window.innerWidth;
@@ -65,9 +65,15 @@ export const useMapControls = ({ provinces, setProvinces }) => {
 
     // --- データ出力機能 (編集モード用) ---
     const exportData = () => {
-        const cleanProvinces = provinces.map(({ actionsLeft, ...rest }) => rest);
+        // 不要なプロパティを除外して出力
+        const cleanProvinces = provinces.map(({ actionsLeft, battleDamage, ...rest }) => rest);
         const provincesString = cleanProvinces.map(p => '  ' + JSON.stringify(p)).join(',\n');
-        const fileContent = `// src/data/provinces.js\n\nexport const SEA_ROUTES = ${JSON.stringify(SEA_ROUTES, null, 4)};\n\nexport const PROVINCE_DATA_BASE = [\n${provincesString}\n];\n`;
+        
+        // SEA_ROUTES をコンパクトに出力する整形処理
+        // JSON.stringify(SEA_ROUTES, null, 4) だと縦に長くなりすぎるため、1ルート1行にする
+        const seaRoutesString = "[\n" + SEA_ROUTES.map(route => `    ${JSON.stringify(route)}`).join(",\n") + "\n]";
+
+        const fileContent = `// src/data/provinces.js\n\nexport const SEA_ROUTES = ${seaRoutesString};\n\nexport const PROVINCE_DATA_BASE = [\n${provincesString}\n];\n\nexport const PROVINCES = PROVINCE_DATA_BASE;\n`;
 
         const blob = new Blob([fileContent], { type: 'text/javascript' });
         const url = URL.createObjectURL(blob);
@@ -81,8 +87,7 @@ export const useMapControls = ({ provinces, setProvinces }) => {
     return {
         mapTransform,
         isDragging,
-        isEditMode,
-        setIsEditMode,
+        isEditMode, 
         setDraggingProvinceId,
         handleWheel,
         handleMouseDown,
