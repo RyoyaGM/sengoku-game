@@ -75,31 +75,71 @@ export const useAiSystem = ({
 
                     const isFrontline = enemies.length > 0;
 
-                    // ★追加: 輸送判定 (修正済: コスト参照を'move'に変更)
-                    if (!isConfused && !isFrontline && p.troops > 1000) {
-                        // COSTS.transport は無いため COSTS.move を使用
+                    // ==========================================================================================
+                    // 【修正点1】 輸送ロジックの改善 (前線でも余裕があれば輸送可能に)
+                    // ==========================================================================================
+                    
+                    // 維持すべき兵数(keepTroops)を計算
+                    let keepTroops = 500; // 後方(安全地帯)のデフォルト
+
+                    if (isFrontline) {
+                        // 隣接する敵の中で、最も兵数が多い国を探す
+                        const maxEnemyTroops = Math.max(...enemies.map(e => e.troops), 0);
+                        // 最大兵数の7割をキープ (ただし、敵が弱すぎる場合でも事故防止のため最低1500は確保)
+                        keepTroops = Math.max(1500, Math.floor(maxEnemyTroops * 0.7));
+                    }
+
+                    if (!isConfused && p.troops > keepTroops) {
                         const transportCost = getCost('move');
                         
                         if (transportCost && p.gold >= transportCost.gold && p.rice >= transportCost.rice) {
                             const allyNeighbors = neighbors.filter(n => n.ownerId === aiId);
                             
                             if (allyNeighbors.length > 0) {
-                                const target = allyNeighbors.sort((a, b) => a.troops - b.troops)[0];
-                                
-                                const sendTroops = Math.floor((p.troops - 500) * 0.5);
-                                const carryRice = Math.floor(sendTroops * 0.5); 
-                                const totalRice = transportCost.rice + carryRice;
-
-                                if (sendTroops > 100 && p.rice >= totalRice) {
-                                    p.gold -= transportCost.gold;
-                                    p.rice -= totalRice;
-                                    p.troops -= sendTroops;
-                                    p.actionsLeft--;
-
-                                    target.troops += sendTroops;
-                                    target.rice += carryRice;
+                                // 輸送先候補の評価
+                                const targetCandidates = allyNeighbors.map(targetProv => {
+                                    const targetNeighbors = targetProv.neighbors
+                                        .map(nid => next.find(x => x.id === nid))
+                                        .filter(n => n);
                                     
-                                    continue;
+                                    const isTargetFrontline = targetNeighbors.some(tn => {
+                                        if (tn.ownerId === aiId) return false;
+                                        if (currentAlliances[aiId]?.includes(tn.ownerId)) return false;
+                                        if (currentCeasefires[aiId]?.[tn.ownerId]) return false;
+                                        return true; 
+                                    });
+
+                                    return {
+                                        ...targetProv,
+                                        isFrontline: isTargetFrontline,
+                                        // 前線なら高スコア、さらに兵が少ないほど優先
+                                        score: (isTargetFrontline ? 10000 : 0) - targetProv.troops 
+                                    };
+                                });
+
+                                // スコアが高い順（前線 ＞ 安全地帯）にソート
+                                targetCandidates.sort((a, b) => b.score - a.score);
+                                const bestTarget = targetCandidates[0];
+                                const target = allyNeighbors.find(t => t.id === bestTarget.id);
+
+                                // 輸送実行判定: ターゲットが前線、またはターゲットの兵が極端に少ない場合
+                                if (bestTarget.isFrontline || bestTarget.troops < 500) {
+                                    const surplusTroops = p.troops - keepTroops;
+                                    const sendTroops = Math.floor(surplusTroops * 0.5);
+                                    const carryRice = Math.floor(sendTroops * 0.5); 
+                                    const totalRice = transportCost.rice + carryRice;
+
+                                    if (sendTroops > 100 && p.rice >= totalRice) {
+                                        p.gold -= transportCost.gold;
+                                        p.rice -= totalRice;
+                                        p.troops -= sendTroops;
+                                        p.actionsLeft--;
+
+                                        target.troops += sendTroops;
+                                        target.rice += carryRice;
+                                        
+                                        continue;
+                                    }
                                 }
                             }
                         }
@@ -130,22 +170,47 @@ export const useAiSystem = ({
                         p.actionsLeft--;
 
                         if (target.ownerId === playerDaimyoId) {
+                            // 対プレイヤー戦は保留リストに追加（BattleSystemで処理）
                             attacksToPlayer.push({
                                 attacker: { ...p }, defender: { ...target },
                                 attackerAmount: attackTroops, attackerId: aiId, defenderId: target.ownerId
                             });
                             p.troops -= attackTroops;
                         } else {
+                            // ==========================================================================================
+                            // 【修正点2】 対AI戦闘計算 (防御側有利に修正)
+                            // ==========================================================================================
+                            
                             let atk = attackTroops;
                             let def = target.troops;
                             p.troops -= atk; 
 
+                            // 防御側の「地形・城郭ボーナス」 (defense 100につき20%)
+                            const defenseBonus = (target.defense || 0) / 500;
+
+                            // 籠城するかどうかの判定 (劣勢、または堅城なら籠城)
+                            const isSiege = (def < atk) || (target.defense >= 80);
+
+                            // ダメージ係数の設定
+                            // 防御側被害: 籠城なら大きく軽減、そうでなくても基本は攻撃側より低く
+                            let defDamageRate = isSiege ? Math.max(0.01, 0.05 - defenseBonus) : 0.08;
+                            
+                            // 攻撃側被害: 籠城相手だと反撃ダメージ大
+                            let atkDamageRate = isSiege ? 0.10 + (defenseBonus * 1.5) : 0.10;
+
                             while(atk > 0 && def > 0) {
-                                atk -= Math.floor(def * 0.1);
-                                def -= Math.floor(atk * 0.15);
+                                // ランダム要素（0.8 ~ 1.2倍）
+                                const atkLoss = Math.floor(def * atkDamageRate * (0.8 + Math.random() * 0.4));
+                                const defLoss = Math.floor(atk * defDamageRate * (0.8 + Math.random() * 0.4));
+                            
+                                atk -= atkLoss;
+                                def -= defLoss;
+                                
+                                if (atkLoss <= 0 && defLoss <= 0) break;
                             }
 
                             if (def <= 0) {
+                                // 制圧成功
                                 const oldOwner = target.ownerId;
                                 target.ownerId = aiId; 
                                 target.troops = Math.max(1, atk); 
@@ -158,8 +223,9 @@ export const useAiSystem = ({
                                 updateResource(aiId, 0, 0, 5);
                                 setTimeout(() => updateResource(oldOwner, 0, 0, -5), 0);
                             } else {
+                                // 防衛成功
                                 target.troops = def;
-                                p.troops += Math.max(0, Math.floor(atk * 0.5));
+                                p.troops += Math.max(0, Math.floor(atk * 0.5)); // 敗残兵の一部帰還
                             }
                         }
                         continue;
