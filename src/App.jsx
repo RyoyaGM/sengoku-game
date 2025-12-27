@@ -2,13 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
 import { getFormattedDate } from './utils/helpers';
-import { 
-  INITIAL_RESOURCES, 
-  INITIAL_ALLIANCES, 
-  INITIAL_CEASEFIRES, 
-  INITIAL_RELATIONS, 
-  INITIAL_PROVINCES 
-} from './utils/initializers';
+// ★修正: SCENARIOSをインポート
+import { SCENARIOS } from './data/scenarios';
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
@@ -35,20 +30,23 @@ import { useGameLoop } from './hooks/useGameLoop';
 import { useMapControls } from './hooks/useMapControls';
 
 const App = () => {
-  const [provinces, setProvinces] = useState(INITIAL_PROVINCES);
-  const [daimyoStats, setDaimyoStats] = useState(INITIAL_RESOURCES);
-  const [alliances, setAlliances] = useState(INITIAL_ALLIANCES);
-  const [ceasefires, setCeasefires] = useState(INITIAL_CEASEFIRES);
-  const [relations, setRelations] = useState(INITIAL_RELATIONS);
+  // ★修正: 初期値をnullに変更
+  const [provinces, setProvinces] = useState(null);
+  const [daimyoStats, setDaimyoStats] = useState(null);
+  const [alliances, setAlliances] = useState(null);
+  const [ceasefires, setCeasefires] = useState(null);
+  const [relations, setRelations] = useState(null);
   const [coalition, setCoalition] = useState(null);
   
   const [shogunId, setShogunId] = useState('Ashikaga'); 
   const [playerDaimyoId, setPlayerDaimyoId] = useState(null); 
   
+  // ★追加: 現在のシナリオ情報
+  const [currentScenario, setCurrentScenario] = useState(null);
+
   const [aiSpeed, setAiSpeed] = useState(300);
   const [isPaused, setIsPaused] = useState(false);
   const [iconSize, setIconSize] = useState(40);
-  // ★編集モードのstateを追加
   const [isEditMode, setIsEditMode] = useState(false);
 
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
@@ -78,9 +76,6 @@ const App = () => {
       });
   };
 
-  // setRelations をフック外からでも使えるようにラップ
-  const updateRelationsHandler = (newRelations) => setRelations(newRelations);
-
   const {
       mapTransform, isDragging, setDraggingProvinceId,
       handleWheel, handleMouseDown, handleGlobalMouseMove, handleMouseUp, exportData
@@ -93,7 +88,10 @@ const App = () => {
       provincesRef, daimyoStatsRef, setDaimyoStats, setProvinces, setCeasefires,
       coalition, setCoalition, playerDaimyoId, updateResource, setModalState,
       aiSpeed, isPaused, setSelectedProvinceId, setAttackSourceId, setTransportSourceId,
-      setLogs, setLastLog
+      setLogs, setLastLog,
+      // ★修正: シナリオ情報を渡す
+      startYear: currentScenario?.startYear || 1560,
+      scenarioEvents: currentScenario?.events || []
   });
 
   const { 
@@ -121,6 +119,27 @@ const App = () => {
       updateResource, setPendingBattles, showLog, advanceTurn, playerDaimyoId, turn,
       isPaused, aiSpeed
   });
+
+  // ★追加: ゲーム開始処理
+  const handleStartGame = (scenarioId, daimyoId) => {
+    const scenario = SCENARIOS.find(s => s.id === scenarioId);
+    if (!scenario) return;
+
+    // シナリオデータで状態を初期化
+    setProvinces(scenario.data.provinces);
+    setDaimyoStats(scenario.data.daimyoStats);
+    setRelations(scenario.data.relations);
+    setAlliances(scenario.data.alliances || {});
+    setCeasefires(scenario.data.ceasefires || {});
+    setCoalition(scenario.data.coalition || null);
+    
+    // ゲーム設定
+    setCurrentScenario(scenario);
+    setPlayerDaimyoId(daimyoId);
+    setTurn(1);
+    setLogs([]);
+    setLastLog(`${scenario.name}を開始しました。`);
+  };
 
   useEffect(() => {
       if (turnOrder.length === 0 || currentTurnIndex === -1 || isResolvingBattles) return;
@@ -170,7 +189,10 @@ const App = () => {
       }
   };
 
-  if (!playerDaimyoId) return <StartScreen onSelectDaimyo={setPlayerDaimyoId} />;
+  // ★修正: データ未ロード時はスタート画面を表示
+  if (!playerDaimyoId || !provinces) {
+      return <StartScreen onStartGame={handleStartGame} />;
+  }
 
   const playerProvinces = provinces.filter(p => p.ownerId === playerDaimyoId);
   const totalGold = playerProvinces.reduce((s, p) => s + p.gold, 0);
@@ -200,6 +222,8 @@ const App = () => {
             iconSize={iconSize}
             onIconSizeChange={setIconSize}
             onExportData={exportData}
+            // ★修正: 開始年を渡す
+            startYear={currentScenario?.startYear || 1560}
         />
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
@@ -228,7 +252,6 @@ const App = () => {
                 onClose={() => setSelectedProvinceId(null)}
                 isEditMode={isEditMode}
                 onAction={(type, pid, val) => {
-                    // ★ 編集モードのアクション処理を追加
                     if (type === 'update_province') {
                         setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ...val } : p));
                         return;
@@ -253,7 +276,8 @@ const App = () => {
             isPaused={isPaused} 
         />
         
-        {modalState.type === 'tactic_selection' && <TacticSelectionModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} season={getFormattedDate(turn).split(' ')[1]} onSelect={handleTacticSelection} />}
+        {/* ★修正: TacticSelectionModalに渡すseasonにもstartYearを適用 */}
+        {modalState.type === 'tactic_selection' && <TacticSelectionModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} season={getFormattedDate(turn, currentScenario?.startYear).split(' ')[1]} onSelect={handleTacticSelection} />}
         {modalState.type === 'reinforcement_request' && <ReinforcementRequestModal attacker={modalState.data.battle.attacker} defender={modalState.data.battle.defender} potentialAllies={modalState.data.potentialAllies} relations={relations} onConfirm={handleReinforcementDecision} />}
         {modalState.type === 'reward_payment' && <RewardPaymentModal allyId={modalState.data.allyId} amount={modalState.data.amount} onPay={() => handleRewardPayment(true)} onRefuse={() => handleRewardPayment(false)} />}
         
