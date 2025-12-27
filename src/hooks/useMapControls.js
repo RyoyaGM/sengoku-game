@@ -8,12 +8,18 @@ export const useMapControls = ({ provinces, setProvinces, isEditMode }) => {
     const [mapTransform, setMapTransform] = useState({ x: 0, y: 0, scale: 0.6 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+    
+    // 初期化済みフラグ
+    const [isInitialized, setIsInitialized] = useState(false);
 
     // --- 編集モード用 State ---
     const [draggingProvinceId, setDraggingProvinceId] = useState(null);
 
     // --- 初期位置設定 (京都中心) ---
     useEffect(() => {
+        // データが無い場合や、既に初期化済みの場合は何もしない
+        if (!provinces || isInitialized) return;
+
         const kyoto = provinces.find(p => p.id === 'kyoto' || p.id === 'yamashiro' || p.id === 'kannonji');
         if (kyoto) {
             const initialScale = 0.6;
@@ -22,8 +28,11 @@ export const useMapControls = ({ provinces, setProvinces, isEditMode }) => {
             const newX = (screenW / 2) - (kyoto.cx * initialScale);
             const newY = (screenH / 2) - (kyoto.cy * initialScale);
             setMapTransform({ x: newX, y: newY, scale: initialScale });
+            
+            // 初期化完了とする
+            setIsInitialized(true);
         }
-    }, []); // 初回のみ実行
+    }, [provinces, isInitialized]);
 
     // --- マウス操作ハンドラ ---
     const handleWheel = (e) => {
@@ -65,12 +74,13 @@ export const useMapControls = ({ provinces, setProvinces, isEditMode }) => {
 
     // --- データ出力機能 (編集モード用) ---
     const exportData = () => {
+        if (!provinces) return; // ガード
+        
         // 不要なプロパティを除外して出力
         const cleanProvinces = provinces.map(({ actionsLeft, battleDamage, ...rest }) => rest);
         const provincesString = cleanProvinces.map(p => '  ' + JSON.stringify(p)).join(',\n');
         
         // SEA_ROUTES をコンパクトに出力する整形処理
-        // JSON.stringify(SEA_ROUTES, null, 4) だと縦に長くなりすぎるため、1ルート1行にする
         const seaRoutesString = "[\n" + SEA_ROUTES.map(route => `    ${JSON.stringify(route)}`).join(",\n") + "\n]";
 
         const fileContent = `// src/data/provinces.js\n\nexport const SEA_ROUTES = ${seaRoutesString};\n\nexport const PROVINCE_DATA_BASE = [\n${provincesString}\n];\n\nexport const PROVINCES = PROVINCE_DATA_BASE;\n`;
