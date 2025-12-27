@@ -1,51 +1,92 @@
 // src/components/UIComponents.jsx
-import React from 'react';
-import { Shield, Coins, Users, ArrowRight, RotateCcw, List, History, XCircle, Eye, FastForward, Play, Pause, Activity, Menu, Map as MapIcon, Wheat, Star } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Coins, Users, ArrowRight, RotateCcw, List, History, XCircle, Eye, FastForward, Play, Pause, Activity, Menu, Map as MapIcon, Wheat, Star, BookOpen } from 'lucide-react';
 import { DAIMYO_INFO } from '../data/daimyos';
+import { SCENARIOS } from '../data/scenarios';
 
-export const StartScreen = ({ onSelectDaimyo }) => {
+// ★修正: シナリオ選択と大名選択を統合
+export const StartScreen = ({ onStartGame }) => {
+  const [selectedScenarioId, setSelectedScenarioId] = useState(SCENARIOS[0].id);
+
+  // 選択中のシナリオ情報を取得
+  const selectedScenario = SCENARIOS.find(s => s.id === selectedScenarioId) || SCENARIOS[0];
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-stone-900 text-white p-8 overflow-y-auto font-sans">
       <h1 className="text-6xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-600 filter drop-shadow-lg font-serif tracking-widest">戦国シミュレーション</h1>
       <p className="text-stone-400 mb-8 text-xl font-light tracking-wider">群雄割拠の時代を生き抜け</p>
       
-      <button 
-        onClick={() => onSelectDaimyo('SPECTATOR')}
-        className="mb-8 px-8 py-3 bg-stone-800 border border-stone-600 rounded-full hover:bg-stone-700 hover:border-stone-400 transition-all flex items-center gap-2 text-stone-300 font-bold shadow-lg"
-      >
-        <Eye size={20} />
-        観戦モード（AI同士の戦いを見る）
-      </button>
+      <div className="flex gap-8 max-w-7xl w-full">
+        {/* 左カラム: シナリオ選択 */}
+        <div className="w-1/3 flex flex-col gap-4">
+          <h2 className="text-2xl font-serif text-yellow-500 border-b border-stone-700 pb-2 mb-2 flex items-center gap-2">
+            <BookOpen size={24}/> シナリオ選択
+          </h2>
+          <div className="flex flex-col gap-3">
+            {SCENARIOS.map(scenario => (
+              <button
+                key={scenario.id}
+                onClick={() => setSelectedScenarioId(scenario.id)}
+                className={`p-4 rounded-lg text-left transition-all border ${
+                  selectedScenarioId === scenario.id
+                    ? 'bg-stone-800 border-yellow-500 shadow-lg'
+                    : 'bg-stone-800/50 border-stone-700 hover:bg-stone-800 text-stone-400'
+                }`}
+              >
+                <div className="font-bold text-lg mb-1">{scenario.name}</div>
+                <div className="text-xs opacity-70 mb-2">開始年: {scenario.startYear}年</div>
+                <div className="text-sm leading-snug">{scenario.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl w-full">
-        {Object.entries(DAIMYO_INFO).filter(([id]) => id !== 'Minor' && id !== 'Merchant').map(([id, info]) => (
-          <button 
-            key={id} 
-            onClick={() => onSelectDaimyo(id)}
-            className={`relative group overflow-hidden rounded-xl border-2 border-stone-700 hover:border-${info.color.replace('bg-', '')} transition-all duration-300 p-6 flex flex-col items-start gap-3 bg-stone-800 hover:bg-stone-750 hover:shadow-2xl hover:-translate-y-1 text-left`}
-          >
-            <div className={`absolute top-0 right-0 w-24 h-24 -mr-6 -mt-6 rounded-full ${info.color} opacity-20 group-hover:opacity-40 transition-opacity blur-xl`}></div>
-            <div className="flex items-center gap-3 z-10 w-full border-b border-stone-700 pb-2 mb-1">
-               <span className={`w-4 h-4 rounded-full ${info.color} shadow-[0_0_10px_currentColor]`}></span>
-               <span className="text-2xl font-bold">{info.name}</span>
-               <span className="ml-auto text-xs px-2 py-1 rounded bg-stone-900 text-stone-400">難易度: {info.difficulty}</span>
+        {/* 右カラム: 大名選択 */}
+        <div className="w-2/3 flex flex-col gap-4">
+            <h2 className="text-2xl font-serif text-yellow-500 border-b border-stone-700 pb-2 mb-2 flex items-center gap-2">
+                <Users size={24}/> 大名家選択
+            </h2>
+            
+            <button 
+                onClick={() => onStartGame(selectedScenarioId, 'SPECTATOR')}
+                className="mb-4 px-8 py-3 bg-stone-800 border border-stone-600 rounded-full hover:bg-stone-700 hover:border-stone-400 transition-all flex items-center justify-center gap-2 text-stone-300 font-bold shadow-lg w-full"
+            >
+                <Eye size={20} />
+                観戦モード（AI同士の戦いを見る）
+            </button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                {Object.entries(DAIMYO_INFO).filter(([id]) => id !== 'Minor' && id !== 'Merchant').map(([id, info]) => (
+                <button 
+                    key={id} 
+                    onClick={() => onStartGame(selectedScenarioId, id)}
+                    className={`relative group overflow-hidden rounded-xl border-2 border-stone-700 hover:border-${info.color.replace('bg-', '')} transition-all duration-300 p-5 flex flex-col items-start gap-2 bg-stone-800 hover:bg-stone-750 hover:shadow-2xl hover:-translate-y-1 text-left shrink-0`}
+                >
+                    <div className={`absolute top-0 right-0 w-24 h-24 -mr-6 -mt-6 rounded-full ${info.color} opacity-20 group-hover:opacity-40 transition-opacity blur-xl`}></div>
+                    <div className="flex items-center gap-3 z-10 w-full border-b border-stone-700 pb-2 mb-1">
+                    <span className={`w-4 h-4 rounded-full ${info.color} shadow-[0_0_10px_currentColor]`}></span>
+                    <span className="text-xl font-bold">{info.name}</span>
+                    <span className="ml-auto text-xs px-2 py-1 rounded bg-stone-900 text-stone-400">難易度: {info.difficulty}</span>
+                    </div>
+                    <div className="text-xs text-stone-400 z-10 leading-relaxed">
+                    戦略: <span className="text-stone-300">{info.strategy === 'aggressive' ? '天下布武 (好戦的)' : info.strategy === 'defensive' ? '領土保全 (守備的)' : info.strategy === 'ainu' ? '北の守護 (専守防衛)' : '富国強兵 (バランス)'}</span>
+                    </div>
+                </button>
+                ))}
             </div>
-            <div className="text-sm text-stone-400 z-10 leading-relaxed">
-               戦略: <span className="text-stone-300">{info.strategy === 'aggressive' ? '天下布武 (好戦的)' : info.strategy === 'defensive' ? '領土保全 (守備的)' : info.strategy === 'ainu' ? '北の守護 (専守防衛)' : '富国強兵 (バランス)'}</span>
-            </div>
-          </button>
-        ))}
+        </div>
       </div>
     </div>
   );
 };
 
-export const ResourceBar = ({ stats, turn, isPlayerTurn, shogunId, playerId, coalition }) => {
+// ★修正: startYearを受け取るように変更
+export const ResourceBar = ({ stats, turn, isPlayerTurn, shogunId, playerId, coalition, startYear }) => {
   const isSpectator = playerId === 'SPECTATOR';
   if (!stats && !isSpectator) return null;
 
   const isShogun = playerId === shogunId;
-  const currentYear = 1560 + Math.floor((turn - 1) / 4);
+  const currentYear = (startYear || 1560) + Math.floor((turn - 1) / 4);
   const currentSeason = ['春', '夏', '秋', '冬'][(turn - 1) % 4];
 
   return (
