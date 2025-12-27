@@ -228,6 +228,11 @@ const App = () => {
                 onClose={() => setSelectedProvinceId(null)}
                 isEditMode={isEditMode}
                 onAction={(type, pid, val) => {
+                    // ★ 編集モードのアクション処理を追加
+                    if (type === 'update_province') {
+                        setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ...val } : p));
+                        return;
+                    }
                     if (type === 'change_owner') { setProvinces(prev => prev.map(p => p.id === pid ? { ...p, ownerId: val } : p)); return; }
                     const domesticTypes = ['develop', 'cultivate', 'pacify', 'fortify', 'market', 'trade'];
                     if (domesticTypes.includes(type)) {
@@ -267,7 +272,6 @@ const App = () => {
             <HistoricalEventModal 
                 event={modalState.data} daimyoId={playerDaimyoId} 
                 onSelect={(choice) => {
-                    // ★修正: setCeasefires を確実にコンテキストに含める
                     const ctx = { 
                         setProvinces, 
                         updateResource, 
