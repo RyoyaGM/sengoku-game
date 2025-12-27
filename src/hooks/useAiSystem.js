@@ -51,25 +51,18 @@ export const useAiSystem = ({
                 while (p.actionsLeft > 0) {
                     const getCost = (type) => getActionCost(type, COSTS[type], turn, aiId);
 
-                    // ★追加: 資金・兵糧のやりくりロジック
-                    
                     // A. 資金調達 (市場: 米を売る)
-                    // 攻撃(約20金)や徴兵(約30金)に必要な最低限の金(50)がない場合、兵糧を売って金を確保する
-                    // 市場コマンド(COSTS.market)は action:0 なので行動力を消費せず実行
                     if (p.gold < 50 && p.rice >= 200) {
-                        p.rice -= 100; // 米100を消費
-                        p.gold += 80;  // 金80を獲得
-                        // 行動力を消費しないため、continueせずにそのまま次の判定へ進む（このターンで即座に行動可能）
+                        p.rice -= 100;
+                        p.gold += 80;
                     }
 
                     // B. 兵糧調達 (交易: 米を買う)
-                    // 攻撃(約80米)に必要な兵糧がないが、金には余裕がある場合
-                    // 交易コマンド(COSTS.trade)は action:1 なので行動力を消費する
                     if (p.rice < 100 && p.gold >= 300) {
                         p.gold -= 100;
                         p.rice += 80;
-                        p.actionsLeft--; // 行動力を消費
-                        continue; // 次の行動へ
+                        p.actionsLeft--; 
+                        continue; 
                     }
 
                     const neighbors = p.neighbors.map(nid => next.find(x => x.id === nid)).filter(n => n);
@@ -81,6 +74,36 @@ export const useAiSystem = ({
                     });
 
                     const isFrontline = enemies.length > 0;
+
+                    // ★追加: 輸送判定 (修正済: コスト参照を'move'に変更)
+                    if (!isConfused && !isFrontline && p.troops > 1000) {
+                        // COSTS.transport は無いため COSTS.move を使用
+                        const transportCost = getCost('move');
+                        
+                        if (transportCost && p.gold >= transportCost.gold && p.rice >= transportCost.rice) {
+                            const allyNeighbors = neighbors.filter(n => n.ownerId === aiId);
+                            
+                            if (allyNeighbors.length > 0) {
+                                const target = allyNeighbors.sort((a, b) => a.troops - b.troops)[0];
+                                
+                                const sendTroops = Math.floor((p.troops - 500) * 0.5);
+                                const carryRice = Math.floor(sendTroops * 0.5); 
+                                const totalRice = transportCost.rice + carryRice;
+
+                                if (sendTroops > 100 && p.rice >= totalRice) {
+                                    p.gold -= transportCost.gold;
+                                    p.rice -= totalRice;
+                                    p.troops -= sendTroops;
+                                    p.actionsLeft--;
+
+                                    target.troops += sendTroops;
+                                    target.rice += carryRice;
+                                    
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                     
                     // --- 攻撃判定 ---
                     const attackCost = getCost('attack');
@@ -154,11 +177,10 @@ export const useAiSystem = ({
                         continue;
                     }
 
-                    // AIによる動的投資（確率と上限で抑制）
                     const surplusGold = Math.max(0, p.gold - prm.goldReserve);
                     const MAX_AI_INVEST = 50; 
 
-                    // 2. 商業開発 (確率 30% で実行)
+                    // 2. 商業開発
                     if ((p.commerceDev || 0) < 100 && surplusGold > 50 && Math.random() < 0.3) {
                         let investAmount = Math.floor(surplusGold * 0.2);
                         investAmount = Math.min(investAmount, MAX_AI_INVEST);
@@ -172,7 +194,7 @@ export const useAiSystem = ({
                         }
                     }
 
-                    // 3. 農業開発 (確率 30% で実行)
+                    // 3. 農業開発
                     if ((p.agriDev || 0) < 100 && surplusGold > 50 && Math.random() < 0.3) {
                         let investAmount = Math.floor(surplusGold * 0.2);
                         investAmount = Math.min(investAmount, MAX_AI_INVEST);
@@ -186,7 +208,7 @@ export const useAiSystem = ({
                         }
                     }
 
-                    // 4. 防御強化など (確率 20% で実行)
+                    // 4. 防御強化
                     if (p.gold > 1000 && Math.random() < 0.2) {
                         p.gold -= 100;
                         p.rice += 80;
