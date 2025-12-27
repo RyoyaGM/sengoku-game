@@ -1,6 +1,6 @@
 // src/components/MapComponents.jsx
 import React, { useState } from 'react';
-import { Coins, Wheat, Users, TrendingUp, Activity, Skull, Shield, Swords, ArrowRight, Heart, Handshake, Crown } from 'lucide-react';
+import { Coins, Wheat, Users, TrendingUp, Activity, Skull, Shield, Swords, ArrowRight, Heart, Handshake, Crown, Edit3 } from 'lucide-react';
 import { DAIMYO_INFO } from '../data/daimyos';
 import { SEA_ROUTES } from '../data/provinces';
 import { COSTS } from '../data/constants';
@@ -130,6 +130,126 @@ export const ProvincePopup = ({
     const owner = DAIMYO_INFO[p.ownerId] || { name: '独立勢力', color: 'bg-stone-500' };
     const isOwner = p.ownerId === playerDaimyoId;
     
+    // --- 編集モードの場合の表示 ---
+    if (isEditMode) {
+        return (
+            <div className="fixed top-24 left-4 z-40 bg-stone-900/95 text-white p-4 rounded-xl border border-yellow-600 shadow-2xl w-80 backdrop-blur-sm animate-fade-in max-h-[80vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4 border-b border-stone-700 pb-2">
+                    <h3 className="text-lg font-bold text-yellow-500 flex items-center gap-2"><Edit3 size={18}/> 領土データ編集</h3>
+                    <button onClick={onClose} className="text-stone-400 hover:text-white"><Shield size={16}/></button>
+                </div>
+                
+                <div className="space-y-4 text-xs">
+                    <div>
+                        <label className="block text-stone-400 mb-1 font-bold">拠点名</label>
+                        <input 
+                            type="text" 
+                            value={p.name} 
+                            onChange={(e) => onAction('update_province', p.id, { name: e.target.value })}
+                            className="w-full bg-stone-800 border border-stone-600 rounded p-1.5 focus:border-yellow-500 outline-none"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-stone-400 mb-1 font-bold">支配大名</label>
+                        <select 
+                            value={p.ownerId} 
+                            onChange={(e) => onAction('update_province', p.id, { ownerId: e.target.value })}
+                            className="w-full bg-stone-800 border border-stone-600 rounded p-1.5 focus:border-yellow-500 outline-none"
+                        >
+                            {Object.entries(DAIMYO_INFO).map(([id, info]) => (
+                                <option key={id} value={id}>{info.name} ({id})</option>
+                            ))}
+                            <option value="Minor">独立勢力</option>
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-stone-400 mb-1">資金 (Gold)</label>
+                            <input type="number" value={p.gold} min={0}
+                                onChange={(e) => onAction('update_province', p.id, { gold: Math.max(0, parseInt(e.target.value)||0) })}
+                                className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                        </div>
+                        <div>
+                            <label className="block text-stone-400 mb-1">兵糧 (Rice)</label>
+                            <input type="number" value={p.rice} min={0}
+                                onChange={(e) => onAction('update_province', p.id, { rice: Math.max(0, parseInt(e.target.value)||0) })}
+                                className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                        </div>
+                        <div>
+                            <label className="block text-stone-400 mb-1">兵数 (Troops)</label>
+                            <input type="number" value={p.troops} min={0}
+                                onChange={(e) => onAction('update_province', p.id, { troops: Math.max(0, parseInt(e.target.value)||0) })}
+                                className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                        </div>
+                        <div>
+                            <label className="block text-stone-400 mb-1">人口 (Pop)</label>
+                            <input type="number" value={p.population} min={0}
+                                onChange={(e) => onAction('update_province', p.id, { population: Math.max(0, parseInt(e.target.value)||0) })}
+                                className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                        </div>
+                    </div>
+
+                    <div className="border-t border-stone-700 pt-2">
+                        <label className="block text-stone-500 mb-2 font-bold text-[10px]">軍事・治安パラメータ</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            <div>
+                                <label className="block text-stone-400">防御</label>
+                                <input type="number" value={p.defense} min={0}
+                                    onChange={(e) => onAction('update_province', p.id, { defense: Math.max(0, parseInt(e.target.value)||0) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                            <div>
+                                <label className="block text-stone-400">訓練 (0-100)</label>
+                                <input type="number" value={p.training} max={100} min={0}
+                                    onChange={(e) => onAction('update_province', p.id, { training: Math.min(100, Math.max(0, parseInt(e.target.value)||0)) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                            <div>
+                                <label className="block text-stone-400">民心 (0-100)</label>
+                                <input type="number" value={p.loyalty} max={100} min={0}
+                                    onChange={(e) => onAction('update_province', p.id, { loyalty: Math.min(100, Math.max(0, parseInt(e.target.value)||0)) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border-t border-stone-700 pt-2">
+                        <label className="block text-stone-500 mb-2 font-bold text-[10px]">内政・開発パラメータ</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-stone-400">商業開発度 (0-100)</label>
+                                <input type="number" value={p.commerceDev} max={100} min={0}
+                                    onChange={(e) => onAction('update_province', p.id, { commerceDev: Math.min(100, Math.max(0, parseInt(e.target.value)||0)) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                            <div>
+                                <label className="block text-stone-400">農業開発度 (0-100)</label>
+                                <input type="number" value={p.agriDev} max={100} min={0}
+                                    onChange={(e) => onAction('update_province', p.id, { agriDev: Math.min(100, Math.max(0, parseInt(e.target.value)||0)) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                            <div>
+                                <label className="block text-stone-400">都市化率 (0-1)</label>
+                                <input type="number" step="0.01" max="1" min="0" value={p.urbanization} 
+                                    onChange={(e) => onAction('update_province', p.id, { urbanization: Math.min(1, Math.max(0, parseFloat(e.target.value)||0)) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                            <div>
+                                <label className="block text-stone-400">基本農業値</label>
+                                <input type="number" step="0.1" value={p.baseAgri} min={0}
+                                    onChange={(e) => onAction('update_province', p.id, { baseAgri: Math.max(0, parseFloat(e.target.value)||0) })}
+                                    className="w-full bg-stone-800 border border-stone-600 rounded p-1" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- 通常モードの表示 (変更なし) ---
     const pop = p.population || 10000;
     const urb = p.urbanization || 0.1;
     const commDev = p.commerceDev || 0;
