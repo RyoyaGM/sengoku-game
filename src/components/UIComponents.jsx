@@ -78,12 +78,11 @@ export const StartScreen = ({ onStartGame }) => {
   );
 };
 
-// --- ResourceBar: 速度調整、設定ボタンなど ---
+// --- 上部リソースバー & 各種コントローラー ---
 export const ResourceBar = ({ 
     stats, turn, isPlayerTurn, shogunId, playerId, coalition, startYear,
     aiSpeed, onSpeedChange, isPaused, onPauseToggle,
-    onHistoryClick, onDaimyoList, onSettingsClick, 
-    isEditMode, onEditModeToggle,
+    onHistoryClick, onDaimyoList, isEditMode, onEditModeToggle,
     iconSize, onIconSizeChange, onExportData
 }) => {
   const isSpectator = playerId === 'SPECTATOR';
@@ -92,26 +91,27 @@ export const ResourceBar = ({
   const currentYear = (startYear || 1560) + Math.floor((turn - 1) / 4);
   const currentSeason = ['春', '夏', '秋', '冬'][(turn - 1) % 4];
 
-  // 速度倍率の計算 (基準: 1000ms = 1倍速)
-  const currentMultiplier = Math.round(1000 / Math.max(10, aiSpeed));
+  // 倍率計算 (1000ms = x1.0)
+  // 小数点第1位まで表示
+  const currentMultiplier = (1000 / Math.max(10, aiSpeed)).toFixed(1);
 
   const handleSpeedInput = (e) => {
-      const val = parseInt(e.target.value);
-      if (!isNaN(val) && val > 0) {
-          const newMs = Math.max(10, Math.floor(1000 / val));
-          onSpeedChange(newMs);
-      }
+      let val = parseFloat(e.target.value);
+      if (isNaN(val) || val <= 0.1) val = 0.1;
+      // ms = 1000 / multiplier
+      const newMs = Math.floor(1000 / val);
+      onSpeedChange(Math.max(10, newMs));
   };
 
   const setPresetSpeed = (multiplier) => {
-      const newMs = Math.max(10, Math.floor(1000 / multiplier));
+      const newMs = Math.floor(1000 / multiplier);
       onSpeedChange(newMs);
   };
 
   return (
     <div className="absolute top-0 left-0 right-0 bg-stone-900/95 text-white h-14 px-4 flex justify-between items-center shadow-md z-40 border-b border-stone-700 backdrop-blur-sm">
       
-      {/* 左側: 日付と時間操作 */}
+      {/* 左側: 時間操作 */}
       <div className="flex items-center gap-4">
         <div className="flex flex-col">
             <div className="text-[10px] text-stone-400 font-serif leading-none mb-0.5">戦国絵巻</div>
@@ -120,7 +120,6 @@ export const ResourceBar = ({
             </div>
         </div>
 
-        {/* 速度調整パネル */}
         <div className="flex items-center gap-2 bg-stone-800/50 p-1 pl-2 pr-2 rounded-full border border-stone-600/50">
             <button 
                 onClick={onPauseToggle} 
@@ -129,26 +128,27 @@ export const ResourceBar = ({
             >
                 {isPaused ? <Play size={14} className="fill-current"/> : <Pause size={14} className="fill-current"/>}
             </button>
-
-            <div className="flex items-center gap-1 border-l border-stone-700 pl-2">
-                {/* プリセットボタン */}
-                <button onClick={() => setPresetSpeed(1)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===1 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>1倍</button>
-                <button onClick={() => setPresetSpeed(5)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===5 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>5倍</button>
-                <button onClick={() => setPresetSpeed(20)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===20 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>20倍</button>
-                <button onClick={() => setPresetSpeed(100)} className={`text-[10px] px-1.5 py-0.5 rounded ${currentMultiplier===100 ? 'bg-stone-600 text-yellow-400 font-bold' : 'text-stone-500 hover:text-stone-300'}`}>超速</button>
-            </div>
             
-            <div className="flex items-center gap-1 ml-1 bg-stone-900 rounded px-2 py-0.5 border border-stone-700">
-                <span className="text-stone-500 text-xs">×</span>
+            {/* プリセットボタン */}
+            <div className="flex bg-stone-900 rounded border border-stone-700 overflow-hidden mr-2">
+                <button onClick={() => setPresetSpeed(0.5)} className={`px-2 py-1 text-[10px] font-bold ${aiSpeed >= 2000 ? 'bg-stone-600 text-yellow-400' : 'text-stone-500 hover:text-stone-300'}`}>遅</button>
+                <button onClick={() => setPresetSpeed(1.0)} className={`px-2 py-1 text-[10px] font-bold border-l border-stone-700 ${Math.abs(aiSpeed - 1000) < 100 ? 'bg-stone-600 text-yellow-400' : 'text-stone-500 hover:text-stone-300'}`}>普</button>
+                <button onClick={() => setPresetSpeed(5.0)} className={`px-2 py-1 text-[10px] font-bold border-l border-stone-700 ${Math.abs(aiSpeed - 200) < 50 ? 'bg-stone-600 text-yellow-400' : 'text-stone-500 hover:text-stone-300'}`}>速</button>
+                <button onClick={() => setPresetSpeed(20.0)} className={`px-2 py-1 text-[10px] font-bold border-l border-stone-700 ${aiSpeed <= 50 ? 'bg-stone-600 text-yellow-400' : 'text-stone-500 hover:text-stone-300'}`}>極</button>
+            </div>
+
+            {/* 自由入力 */}
+            <div className="flex items-center gap-1 bg-black/30 px-2 py-1 rounded">
+                <span className="text-xs text-stone-400">×</span>
                 <input 
-                    type="text"
-                    inputMode="numeric" 
-                    pattern="\d*"
+                    type="number" 
+                    step="0.1"
+                    min="0.1"
+                    max="100"
                     value={currentMultiplier} 
                     onChange={handleSpeedInput}
-                    className="w-8 bg-transparent text-center text-yellow-400 font-mono font-bold text-sm focus:outline-none"
+                    className="w-12 bg-transparent text-sm font-mono font-bold text-yellow-400 text-center outline-none"
                 />
-                <span className="text-stone-500 text-xs">倍</span>
             </div>
         </div>
       </div>
@@ -204,16 +204,16 @@ export const ResourceBar = ({
                     className={`p-2 rounded border transition-colors ${isEditMode ? 'bg-yellow-800 border-yellow-500 text-yellow-200' : 'bg-stone-800 border-stone-600 text-stone-300 hover:bg-stone-700'}`} 
                     title="マップ編集モード"
                 >
-                    <Edit size={18}/>
+                    {isEditMode ? <Settings size={18}/> : <Edit size={18}/>}
                 </button>
                 
                 {/* 編集モード時のポップアップメニュー */}
                 {isEditMode && (
-                    <div className="absolute top-full right-0 mt-2 bg-stone-800 border border-stone-600 rounded-lg p-3 shadow-xl w-48 z-50 flex flex-col gap-3 animate-fade-in">
+                    <div className="absolute top-full right-0 mt-2 bg-stone-800 border border-stone-600 rounded-lg p-3 shadow-xl w-56 z-50 flex flex-col gap-3 animate-fade-in">
                         <div>
                             <div className="flex justify-between text-xs text-stone-400 mb-1">
                                 <span>アイコンサイズ</span>
-                                <span className="text-yellow-400 font-mono">{iconSize}</span>
+                                <span className="text-yellow-400 font-mono">{iconSize}px</span>
                             </div>
                             <input 
                                 type="range" min="20" max="80" value={iconSize} 
@@ -231,18 +231,13 @@ export const ResourceBar = ({
                     </div>
                 )}
             </div>
-
-            {/* ★設定ボタン */}
-            <button onClick={onSettingsClick} className="p-2 bg-stone-800 hover:bg-stone-700 rounded border border-stone-600 text-stone-300 transition-colors" title="設定">
-                <Settings size={18}/>
-            </button>
         </div>
       </div>
     </div>
   );
 };
 
-// --- ActionLogToast ---
+// --- 一時的なアクションログ表示 ---
 export const ActionLogToast = ({ log }) => {
     const [visible, setVisible] = useState(false);
     const [message, setMessage] = useState('');
@@ -261,16 +256,16 @@ export const ActionLogToast = ({ log }) => {
     if (!visible) return null;
 
     return (
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none w-max max-w-lg">
-            <div className="bg-black/80 text-white px-6 py-2.5 rounded-full border border-stone-500/50 backdrop-blur-sm shadow-xl animate-bounce-in text-sm font-medium flex items-center gap-3">
-                <History size={16} className="text-yellow-500 shrink-0"/>
-                <span className="truncate">{message}</span>
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+            <div className="bg-black/70 text-white px-6 py-2 rounded-full border border-stone-500/50 backdrop-blur-sm shadow-lg animate-bounce-in text-sm font-medium flex items-center gap-2">
+                <History size={14} className="text-yellow-500"/>
+                {message}
             </div>
         </div>
     );
 };
 
-// --- FloatingActionPanel ---
+// --- 右下フロートアクションパネル ---
 export const FloatingActionPanel = ({ 
     onEndTurn, isPlayerTurn, onCancelSelection, hasSelection, 
     viewingRelationId, onViewBack, isPaused, currentDaimyoName 
