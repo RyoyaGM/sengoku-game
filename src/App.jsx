@@ -1,7 +1,7 @@
 // src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { DAIMYO_INFO } from './data/daimyos';
-import { getRiceMarketPrice, getFormattedDate } from './utils/helpers';
+import { getFormattedDate } from './utils/helpers';
 import { 
   INITIAL_RESOURCES, 
   INITIAL_ALLIANCES, 
@@ -25,8 +25,8 @@ import {
   ReinforcementRequestModal, RewardPaymentModal, BetrayalWarningModal, TacticSelectionModal 
 } from './components/BattleModals';
 
-// ★追加: 新しいモーダルをインポート
 import { TransportModal } from './components/TransportModal';
+import { InvestmentSelector } from './components/Modals'; // ★追加: InvestmentSelectorのインポート
 
 import { useAiSystem } from './hooks/useAiSystem';
 import { useBattleSystem } from './hooks/useBattleSystem';
@@ -103,7 +103,7 @@ const App = () => {
   });
 
   const { 
-      handleDomesticAction, handleMilitaryAction, handleDiplomacy, executeBetrayal, handleTroopAction
+      handleDomesticAction, handleMilitaryAction, handleDiplomacy, executeBetrayal, handleTroopAction, handleInvestment
   } = usePlayerActions({
       provinces, setProvinces, daimyoStats, setDaimyoStats, alliances, setAlliances, relations,
       playerDaimyoId, turn, updateResource, showLog, setModalState, setAttackSourceId,
@@ -150,7 +150,6 @@ const App = () => {
           const type = isTargetable ? 'attack' : 'transport';
           const srcId = isTargetable ? attackSourceId : transportSourceId;
           const src = provinces.find(p => p.id === srcId);
-          // ★修正: 輸送の場合は新しいモーダルタイプを設定
           setModalState({ 
               type: type === 'transport' ? 'transport_selection' : 'troop', 
               data: { 
@@ -158,7 +157,7 @@ const App = () => {
                   sourceId: srcId, 
                   targetId: pid, 
                   maxTroops: src.troops,
-                  maxGold: src.gold, // 金・米の上限も渡す
+                  maxGold: src.gold,
                   maxRice: src.rice 
               } 
           });
@@ -187,11 +186,12 @@ const App = () => {
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={handleMouseDown} onMouseMove={handleGlobalMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel}>
-            <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75">
-                <div className="absolute top-0 left-0 w-[5600px] h-[8800px] z-0 pointer-events-none">
+            {/* ★修正: 親コンテナを5600x8800に固定してスケール */}
+            <div style={{ transform: `translate(${mapTransform.x}px, ${mapTransform.y}px) scale(${mapTransform.scale})` }} className="absolute origin-top-left transition-transform duration-75 w-[7000px] h-[11000px]">
+                <div className="absolute top-0 left-0 w-full h-full z-0 pointer-events-none">
                     <img src={japanMapImg} alt="日本地図" className="w-full h-full object-cover opacity-50" />
                 </div>
-                <div className="relative z-10">
+                <div className="relative z-10 w-full h-full">
                     <GameMap 
                         provinces={provinces} viewingRelationId={viewingRelationId} playerDaimyoId={playerDaimyoId}
                         alliances={alliances} ceasefires={ceasefires} coalition={coalition}
@@ -281,12 +281,20 @@ const App = () => {
         
         {modalState.type === 'troop' && <TroopSelector maxTroops={modalState.data.maxTroops} type={modalState.data.type} onConfirm={(amount) => handleTroopAction(amount, ceasefires)} onCancel={() => setModalState({type: null})} />}
         
-        {/* ★追加: 輸送用モーダル */}
         {modalState.type === 'transport_selection' && <TransportModal 
             maxTroops={modalState.data.maxTroops}
             maxGold={modalState.data.maxGold}
             maxRice={modalState.data.maxRice}
             onConfirm={(amounts) => handleTroopAction(amounts, ceasefires)} 
+            onCancel={() => setModalState({type: null})} 
+        />}
+
+        {/* ★追加: 投資用モーダル */}
+        {modalState.type === 'investment' && <InvestmentSelector 
+            type={modalState.data.type}
+            maxGold={modalState.data.maxGold}
+            maxRice={modalState.data.maxRice}
+            onConfirm={handleInvestment} 
             onCancel={() => setModalState({type: null})} 
         />}
         
