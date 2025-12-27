@@ -35,10 +35,6 @@ export const useAiSystem = ({
             const daimyoStats = daimyoStatsRef.current[aiId];
             const isConfused = daimyoStats && daimyoStats.confusionTurns > 0;
 
-            const homeProvinceId = daimyoInfo.homeProvinceId;
-            const homeProvData = homeProvinceId ? next.find(p => p.id === homeProvinceId) : null;
-            const isHomeLost = homeProvData && homeProvData.ownerId !== aiId;
-
             // 戦略パラメータ
             const params = {
                 aggressive: { attackChance: 0.9, recruitThreshold: 400, goldReserve: 50, riceReserve: 50, sendRatio: 0.8 },
@@ -96,7 +92,6 @@ export const useAiSystem = ({
                             });
                             p.troops -= attackTroops;
                         } else {
-                            // AI同士の簡易戦闘
                             let atk = attackTroops;
                             let def = target.troops;
                             p.troops -= atk; 
@@ -128,11 +123,7 @@ export const useAiSystem = ({
 
                     // --- 内政・徴兵・資金活用 ---
                     const recruitCost = getCost('recruit');
-                    const devCost = getCost('develop');
                     
-                    // 変動コストの計算 (現在値の半分を加算)
-                    const realDevCostGold = devCost.gold + Math.floor(p.commerce * 0.5);
-
                     // 1. 徴兵
                     if (isFrontline && p.troops < prm.recruitThreshold && p.gold >= recruitCost.gold && p.rice >= recruitCost.rice) {
                         p.gold -= recruitCost.gold; 
@@ -142,30 +133,47 @@ export const useAiSystem = ({
                         continue;
                     }
 
-                    // 2. 商業開発 (上限チェックとコスト計算)
-                    if (p.commerce < p.maxCommerce && p.gold >= realDevCostGold + prm.goldReserve) {
-                        p.gold -= realDevCostGold;
-                        p.commerce += COSTS.develop.boost;
-                        p.actionsLeft--;
-                        continue;
+                    // ★変更: AIによる動的投資
+                    // 所持金からリザーブを引いた余剰分の一定割合を投資
+                    const surplusGold = Math.max(0, p.gold - prm.goldReserve);
+                    
+                    // 2. 商業開発
+                    if (p.commerce < p.maxCommerce && surplusGold > 50) {
+                        const investAmount = Math.floor(surplusGold * 0.5); // 余剰の半分を投資
+                        const boost = Math.floor(investAmount / 10);
+                        if (boost > 0) {
+                            p.gold -= investAmount;
+                            p.commerce += boost;
+                            p.actionsLeft--;
+                            continue;
+                        }
                     }
 
-                    // 3. 余剰資金の活用 (米購入 & 防御強化)
+                    // 3. 農業開発 (春のみなど季節限定でも良いが、簡易化のため資金があれば実行)
+                    // AIは簡単のため金のみで農業開発を行うとする
+                    if (p.agriculture < p.maxAgriculture && surplusGold > 50) {
+                        const investAmount = Math.floor(surplusGold * 0.3); // 余剰の3割
+                        const boost = Math.floor(investAmount / 10);
+                        if (boost > 0) {
+                            p.gold -= investAmount;
+                            p.agriculture += boost;
+                            p.actionsLeft--;
+                            continue;
+                        }
+                    }
+
+                    // 4. 防御強化など
                     if (p.gold > 1000) {
-                        // 金100で米80を買う (簡易トレード)
                         p.gold -= 100;
                         p.rice += 80;
-                        
-                        // 防御も上げる
                         if (p.defense < 150) {
-                            p.gold -= 50; // コスト
+                            p.gold -= 50; 
                             p.defense += 5;
                         }
                         p.actionsLeft--;
                         continue;
                     }
 
-                    // 行動力消費して終了
                     p.actionsLeft = 0;
                 }
             });

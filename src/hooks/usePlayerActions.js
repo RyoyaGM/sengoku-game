@@ -24,25 +24,15 @@ export const usePlayerActions = ({
     setRelations
 }) => {
 
-    // ★修正: コスト計算に「現在値による変動」を追加
-    // province引数がnullの場合や、変動コストがないコマンドはbaseCostのみ返す
     const calculateDynamicCost = (province, baseCost, actionType) => {
         let additionalGold = 0;
-
-        // 商業・農業開発は、発展しているほど金がかかる（インフレ抑制）
-        if (actionType === 'develop' && province) {
-            // 現在の商業値 * 0.5 を追加コストとする
-            additionalGold = Math.floor(province.commerce * 0.5);
-        } else if (actionType === 'cultivate' && province) {
-            additionalGold = Math.floor(province.agriculture * 0.5);
-        }
-
+        // 固定のインフレコストは廃止し、ユーザー決定額ベースに移行するため、ここでは季節補正のみ返す
+        // ただし他のアクション（pacify等）のために残す
         const seasonWeightedCost = getActionCost(actionType, baseCost, turn, playerDaimyoId);
-        
         return {
             ...seasonWeightedCost,
             gold: seasonWeightedCost.gold + additionalGold,
-            baseActionCost: seasonWeightedCost.action // 行動力コスト
+            baseActionCost: seasonWeightedCost.action 
         };
     };
 
@@ -53,17 +43,13 @@ export const usePlayerActions = ({
             return;
         }
 
-        // ★追加: 開発限界のチェック
-        if (type === 'develop' && p.commerce >= p.maxCommerce) {
-            showLog(`これ以上の商業発展は望めません（最大: ${p.maxCommerce}）。`);
-            return;
-        }
-        if (type === 'cultivate' && p.agriculture >= p.maxAgriculture) {
-            showLog(`これ以上の開墾は困難です（最大: ${p.maxAgriculture}）。`);
+        // ★変更: 投資系コマンドはモーダルを開いて金額を決定する
+        if (type === 'develop' || type === 'cultivate') {
+            setModalState({ type: 'investment', data: { type, pid, maxGold: p.gold, maxRice: p.rice } });
             return;
         }
 
-        // 変動コストの計算と消費
+        // 変動コストの計算と消費 (従来通り)
         const realCost = calculateDynamicCost(p, COSTS[type], type);
         
         if (p.gold < realCost.gold || p.rice < realCost.rice) {
@@ -80,10 +66,9 @@ export const usePlayerActions = ({
                     rice: pr.rice - realCost.rice
                 };
 
-                if (type === 'develop') updates.commerce = Math.min(pr.maxCommerce, pr.commerce + COSTS.develop.boost);
-                if (type === 'cultivate') updates.agriculture = Math.min(pr.maxAgriculture, pr.agriculture + COSTS.cultivate.boost);
+                // develop/cultivate はここではなく handleInvestment で処理される
                 if (type === 'pacify') updates.loyalty = Math.min(100, pr.loyalty + COSTS.pacify.boost);
-                if (type === 'fortify') updates.defense = Math.min(200, pr.defense + COSTS.fortify.boost); // 防御上限は高めに
+                if (type === 'fortify') updates.defense = Math.min(200, pr.defense + COSTS.fortify.boost);
                 if (type === 'market') {
                     if (updates.rice >= 100) {
                          updates.rice -= 100;
@@ -94,10 +79,9 @@ export const usePlayerActions = ({
                         return pr;
                     }
                 } else if (type === 'trade') {
-                    // ★追加: 米購入コマンド（tradeを米購入として実装する場合）
                     if (updates.gold >= 100) {
                         updates.gold -= 100;
-                        updates.rice += 80; // 簡易レート
+                        updates.rice += 80;
                         showLog("商人から兵糧を購入しました。");
                     }
                 }
@@ -111,6 +95,51 @@ export const usePlayerActions = ({
         }
     };
 
+    // ★追加: 投資実行ロジック
+    const handleInvestment = (goldAmount, riceAmount) => {
+        const { type, pid } = modalState.data;
+        const p = provinces.find(pr => pr.id === pid);
+
+        if (p.actionsLeft < 1) {
+            showLog("行動力が不足しています。");
+            setModalState({ type: null });
+            return;
+        }
+
+        // 効果計算: (金 + 米) / 10
+        const totalInvest = goldAmount + riceAmount;
+        const boost = Math.floor(totalInvest / 10);
+
+        if (boost <= 0) {
+            showLog("投資額が少なすぎます。効果がありません。");
+            setModalState({ type: null });
+            return;
+        }
+
+        setProvinces(prev => prev.map(pr => {
+            if (pr.id === pid) {
+                let updates = {
+                    ...pr,
+                    gold: pr.gold - goldAmount,
+                    rice: pr.rice - riceAmount,
+                    actionsLeft: pr.actionsLeft - 1
+                };
+
+                if (type === 'develop') {
+                    updates.commerce = Math.min(pr.maxCommerce, pr.commerce + boost);
+                } else if (type === 'cultivate') {
+                    updates.agriculture = Math.min(pr.maxAgriculture, pr.agriculture + boost);
+                }
+                return updates;
+            }
+            return pr;
+        }));
+
+        showLog(`${DAIMYO_INFO[playerDaimyoId].name}: ${type==='develop'?'商業':'農業'}に投資(金${goldAmount}/米${riceAmount})。効果+${boost}`);
+        setModalState({ type: null });
+    };
+
+    // ... (handleMilitaryAction, handleTroopAction, handleDiplomacy, executeBetrayal は変更なし)
     const handleMilitaryAction = (type, pid) => {
         const p = provinces.find(pr => pr.id === pid);
         if (p.actionsLeft < 1) {
@@ -123,7 +152,6 @@ export const usePlayerActions = ({
         const season = getSeason(turn);
         const isBusySeason = season === 'summer' || season === 'autumn';
 
-        // 軍事アクションもコスト計算関数を通す（季節補正など）
         const realCost = calculateDynamicCost(p, COSTS[type] || { gold: 0, rice: 0, action: 1 }, type);
 
         if (type === 'forced_recruit') {
@@ -143,7 +171,6 @@ export const usePlayerActions = ({
             return;
         }
 
-        // コストチェック（強制徴兵以外）
         if (p.gold < realCost.gold || p.rice < realCost.rice) {
             showLog(`軍資金または兵糧が不足しています。`);
             return;
@@ -406,6 +433,7 @@ export const usePlayerActions = ({
         handleMilitaryAction, 
         handleDiplomacy, 
         handleTroopAction,
+        handleInvestment, // エクスポートに追加
         executeBetrayal
     };
 };
