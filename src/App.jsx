@@ -12,7 +12,6 @@ import {
 
 import japanMapImg from './assets/japan_map.jpg'; 
 
-// SpectatorControls は ResourceBar に統合されたため削除(importからも外してOKですが、コンポーネント定義が残っていればエラーにはなりません)
 import { StartScreen, ResourceBar, ControlPanel } from './components/UIComponents';
 import { GameMap, ProvincePopup } from './components/MapComponents';
 
@@ -49,6 +48,8 @@ const App = () => {
   const [aiSpeed, setAiSpeed] = useState(300);
   const [isPaused, setIsPaused] = useState(false);
   const [iconSize, setIconSize] = useState(40);
+  // ★編集モードのstateを追加
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const [selectedProvinceId, setSelectedProvinceId] = useState(null);
   const [attackSourceId, setAttackSourceId] = useState(null);
@@ -77,12 +78,13 @@ const App = () => {
       });
   };
 
-  const updateRelation = (target, diff) => setRelations(prev => ({...prev, [playerDaimyoId]: {...(prev[playerDaimyoId]||{}), [target]: Math.min(100, Math.max(0, (prev[playerDaimyoId]?.[target]||50)+diff))}}));
+  // setRelations をフック外からでも使えるようにラップ
+  const updateRelationsHandler = (newRelations) => setRelations(newRelations);
 
   const {
-      mapTransform, isDragging, isEditMode, setIsEditMode, setDraggingProvinceId,
+      mapTransform, isDragging, setDraggingProvinceId,
       handleWheel, handleMouseDown, handleGlobalMouseMove, handleMouseUp, exportData
-  } = useMapControls({ provinces, setProvinces });
+  } = useMapControls({ provinces, setProvinces, isEditMode, setIsEditMode });
 
   const {
       turn, setTurn, gameState, turnOrder, currentTurnIndex, isPlayerTurn, setIsPlayerTurn,
@@ -99,7 +101,7 @@ const App = () => {
       handleReinforcementDecision, handleBattleFinish, handleRewardPayment,
       handleTacticSelection
   } = useBattleSystem({
-      provinces, setProvinces, relations, updateResource, updateRelation, showLog,
+      provinces, setProvinces, relations, updateResource, setRelations, showLog,
       advanceTurn, playerDaimyoId, daimyoStats, modalState, setModalState, setIsResolvingBattles,
       turn
   });
@@ -178,7 +180,6 @@ const App = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none text-stone-100 flex flex-col items-center justify-center bg-[#0f172a]">
         
-        {/* ResourceBar に機能を集約しました */}
         <ResourceBar 
             stats={displayStats} 
             turn={turn} 
@@ -186,25 +187,20 @@ const App = () => {
             shogunId={shogunId} 
             playerId={playerDaimyoId} 
             coalition={coalition} 
-            // Spectator Props
             aiSpeed={aiSpeed}
             onSpeedChange={setAiSpeed}
             isPaused={isPaused}
             onPauseToggle={handlePauseToggle}
-            // Navigation Props
             onHistoryClick={() => setModalState({type:'history'})}
             onDaimyoList={() => setModalState({type: 'list'})}
             viewingRelationId={viewingRelationId}
             onViewBack={() => setViewingRelationId(null)}
-            // Settings Props
             isEditMode={isEditMode}
             onEditModeToggle={() => setIsEditMode(!isEditMode)}
             iconSize={iconSize}
             onIconSizeChange={setIconSize}
             onExportData={exportData}
         />
-
-        {/* 削除された独立ボタン群（SpectatorControls, MapEdit, IconSize）はここから消えます */}
 
         <div className="relative z-0 w-full h-full overflow-hidden cursor-move" 
              onMouseDown={handleMouseDown} onMouseMove={handleGlobalMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel}>
@@ -243,7 +239,6 @@ const App = () => {
             />
         )}
 
-        {/* ControlPanel もシンプルになりました */}
         <ControlPanel 
             onEndTurn={() => { setIsPlayerTurn(false); advanceTurn(); }} 
             onCancelSelection={() => { setAttackSourceId(null); setTransportSourceId(null); }} 
@@ -272,12 +267,29 @@ const App = () => {
             <HistoricalEventModal 
                 event={modalState.data} daimyoId={playerDaimyoId} 
                 onSelect={(choice) => {
-                    const ctx = { setProvinces, updateResource, showLog, setRelations, setDaimyoStats, setAlliances, setCeasefires, daimyoStats: daimyoStatsRef.current, provinces: provincesRef.current, playerDaimyoId };
+                    // ★修正: setCeasefires を確実にコンテキストに含める
+                    const ctx = { 
+                        setProvinces, 
+                        updateResource, 
+                        showLog, 
+                        setRelations, 
+                        setDaimyoStats, 
+                        setAlliances, 
+                        setCeasefires, 
+                        daimyoStats: daimyoStatsRef.current, 
+                        provinces: provincesRef.current, 
+                        playerDaimyoId 
+                    };
                     let nextEvent = null;
                     if (choice && choice.resolve) nextEvent = choice.resolve(ctx);
                     else if (modalState.data.defaultResolve) nextEvent = modalState.data.defaultResolve(ctx);
-                    if (nextEvent) setModalState({ type: 'historical_event', data: nextEvent });
-                    else { setModalState({ type: null }); startNewSeason(); }
+                    
+                    if (nextEvent) {
+                        setModalState({ type: 'historical_event', data: nextEvent });
+                    } else { 
+                        setModalState({ type: null }); 
+                        startNewSeason(); 
+                    }
                 }} 
             />
         )}
