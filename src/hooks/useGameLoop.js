@@ -1,8 +1,9 @@
+// src/hooks/useGameLoop.js
 import { useState, useEffect } from 'react';
 import { DAIMYO_INFO } from '../data/daimyos';
-import { HISTORICAL_EVENTS } from '../data/events';
 import { getFormattedDate, getSeason } from '../utils/helpers';
 
+// ★修正: startYear と scenarioEvents を受け取る
 export const useGameLoop = ({
     provincesRef,
     daimyoStatsRef,
@@ -20,7 +21,9 @@ export const useGameLoop = ({
     setAttackSourceId,
     setTransportSourceId,
     setLogs,
-    setLastLog
+    setLastLog,
+    startYear = 1560,
+    scenarioEvents = [] 
 }) => {
     const [turn, setTurn] = useState(1);
     const [gameState, setGameState] = useState('playing');
@@ -31,7 +34,8 @@ export const useGameLoop = ({
     const showLog = (text) => {
         setLastLog(text);
         setLogs(prev => {
-            const newLogs = [...prev, `${getFormattedDate(turn)}: ${text}`];
+            // ★修正: startYearを使って日付整形
+            const newLogs = [...prev, `${getFormattedDate(turn, startYear)}: ${text}`];
             if (newLogs.length > 100) return newLogs.slice(newLogs.length - 100);
             return newLogs;
         });
@@ -120,35 +124,29 @@ export const useGameLoop = ({
             return changed ? next : prev;
         });
 
-        // --- 収入・維持費計算 (新・人口経済システム) ---
+        // --- 収入・維持費計算 ---
         setProvinces(curr => curr.map(p => {
             const daimyoId = p.ownerId;
             const daimyo = DAIMYO_INFO[daimyoId];
             const system = daimyo?.militarySystem || 'standard';
 
-            // 基本パラメータの取得
             const pop = p.population || 10000;
             const urb = p.urbanization || 0.1;
             const commDev = p.commerceDev || 10;
             const agriDev = p.agriDev || 20;
             const baseAgri = p.baseAgri || 1.0;
 
-            // 人口内訳
             const urbanPop = pop * urb;
             const ruralPop = pop * (1 - urb);
 
-            // ダメージ計算用の一時変数
             let currentCommDev = commDev;
             let currentAgriDev = agriDev;
 
-            // 戦闘ダメージ適用
             if (p.battleDamage) {
                 const { commerce: commDmgRate, agriculture: agriDmgRate, seasonCheck } = p.battleDamage;
-                // 開発度が下がる（施設破壊）
                 currentCommDev = Math.max(0, Math.floor(currentCommDev * commDmgRate));
                 
                 if (isAutumn && (seasonCheck === 1 || seasonCheck === 2)) {
-                    // 農繁期に戦場になると農業開発度（生産設備）もダメージ
                     const damage = Math.floor(currentAgriDev * (1 - agriDmgRate));
                     currentAgriDev = Math.max(0, currentAgriDev - damage);
                     if (damage > 0 && daimyoId === playerDaimyoId) {
@@ -157,41 +155,30 @@ export const useGameLoop = ({
                 }
             }
 
-            // --- 収入計算式 ---
-            
-            // 1. 金銭収入 (都市人口 × 開発度 × 税率)
-            // 係数 0.015: 都市人口10万人・開発100%なら 100000 * 1.0 * 0.015 = 1500金
             const TAX_RATE = 0.015;
             const commIncome = Math.floor(urbanPop * (currentCommDev / 100) * TAX_RATE);
 
-            // 2. 兵糧収入 (農村人口 × 開発度 × 肥沃度 × 収穫率) ※秋のみ
-            // 係数 0.02: 農村10万人・開発50%・肥沃度1.0なら 100000 * 0.5 * 1.0 * 0.02 = 1000米(年1回) -> 4ターンで消費250/ターン
             const HARVEST_RATE = 0.02;
             const agIncome = isAutumn ? Math.floor(ruralPop * (currentAgriDev / 100) * baseAgri * HARVEST_RATE) : 0;
 
-            // --- 維持費計算 ---
             let goldMaint = 0;
             let riceMaint = 0;
             
             if (system === 'separated') {
-                // 兵農分離: 金がかかる
                 goldMaint = Math.floor(p.troops * 0.1);
                 riceMaint = Math.floor(p.troops * 0.1);
             } else if (system === 'ichiryo') {
-                // 一領具足: ほぼタダ
                 goldMaint = 0;
                 riceMaint = Math.floor(p.troops * 0.02);
             } else {
-                // 標準
                 goldMaint = 0;
-                riceMaint = Math.floor(p.troops * 0.1); // 兵1000なら毎ターン100米消費
+                riceMaint = Math.floor(p.troops * 0.1);
             }
 
             let newGold = (p.gold || 0) + commIncome - goldMaint;
             let newRice = (p.rice || 0) + agIncome - riceMaint;
             let newTroops = p.troops;
 
-            // 兵糧不足処理
             if (newRice < 0) {
                 const deserters = Math.min(newTroops, Math.abs(newRice) * 2);
                 newTroops -= deserters;
@@ -201,7 +188,6 @@ export const useGameLoop = ({
                 }
             }
             
-            // 資金不足処理
             if (newGold < 0) {
                 newGold = 0;
             }
@@ -211,7 +197,7 @@ export const useGameLoop = ({
                 gold: newGold,
                 rice: newRice,
                 troops: newTroops,
-                commerceDev: currentCommDev, // ダメージ反映後の開発度を保存
+                commerceDev: currentCommDev,
                 agriDev: currentAgriDev,
                 actionsLeft: 3,
                 battleDamage: null 
@@ -240,8 +226,9 @@ export const useGameLoop = ({
 
     useEffect(() => {
         if (turn > 1) {
-            showLog(`${getFormattedDate(turn)}になりました。`);
-            const occurredEvent = HISTORICAL_EVENTS.find(e => e.trigger(turn, provincesRef.current, daimyoStatsRef.current));
+            showLog(`${getFormattedDate(turn, startYear)}になりました。`);
+            // ★修正: scenarioEvents からイベントを検索
+            const occurredEvent = scenarioEvents.find(e => e.trigger(turn, provincesRef.current, daimyoStatsRef.current));
             if (occurredEvent) {
                 setModalState({ type: 'historical_event', data: occurredEvent });
             } else {
